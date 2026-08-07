@@ -1,0 +1,13 @@
+{
+  "name": "doubak-site-generator",
+  "version": "0.0.1",
+  "description": "豆备 (Doubak) 的静态网页生成器。canonical → Markdown + front matter，交给现成的静态站生成器渲染。",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": { "node": ">=20" },
+  "bin": { "doubak-site": "./bin/generate.js" },
+  "scripts": { "test": "node --test \"test/**/*.test.js\"" },
+  "dependencies": {},
+  "devDependencies": {}
+}
