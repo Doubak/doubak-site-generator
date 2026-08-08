@@ -7,6 +7,54 @@ node bin/generate.js <canonical 目录> <bundle 目录> [产出目录]
 npm test    # node --test，零依赖，不需要 npm install
 ```
 
+需要 Node ≥ 20。
+
+## 从档案到能看的站点
+
+```sh
+# 1. 抓取产出的一堆 bundle → canonical
+cd doubak-data-parser
+node bin/parse.js ~/downloads/20260806 ~/downloads/20260806-canonical
+
+# 2. canonical + bundle → 静态站源目录
+cd ../doubak-site-generator
+node bin/generate.js ~/downloads/20260806-canonical ~/downloads/20260806 ~/downloads/20260806-site
+```
+
+第二步为什么还要 bundle：canonical 是纯文本（用 `jq` 就能查，不装二进制），**图片的字节在 bundle 里**。两个输入一个都不能少。
+
+产出：
+
+```
+20260806-site/
+├── content/
+│   ├── _index.md          首页：各媒介各状态的条数
+│   ├── movie/ book/ music/ game/ drama/   一个作品一页，文件名是作品 id
+│   ├── note/ review/      日记与评论全文
+│   └── broadcast/         按月归档，2014-01.md … 2026-08.md
+└── static/
+    ├── covers/            作品封面
+    └── uploads/           自己上传的图（广播附图、日记内嵌图）
+```
+
+## 交给静态站生成器
+
+`content/` + `static/` 这个布局就是 **Hugo** 的布局，所以 Hugo 最省事：
+
+```sh
+hugo new site mysite && cd mysite
+git clone --depth 1 https://github.com/<某个主题> themes/x
+echo 'theme = "x"' >> hugo.toml
+
+cp -r ~/downloads/20260806-site/content/* content/
+cp -r ~/downloads/20260806-site/static/*  static/
+hugo server
+```
+
+Astro / Eleventy / Jekyll 同理，只是目录名不同（Astro 是 `src/content/` 与 `public/`，Jekyll 是 `_posts/` 与站点根）。front matter 里除了 `title` / `date` / `tags` 全部带 `douban_` 前缀，就是为了不撞上主题自己的约定 —— 主题认不认得它们不影响构建，只是不显示。
+
+**注意：还没有对着任何一个 SSG 真的跑过。** 3098 个文件里只要有一处 front matter 不合它的口味，整站构建就会失败。目前只有间接证据，两条：`test/yaml.test.js` 拿冒号、引号、井号、颜文字、看起来像布尔值的 `no`、看起来像数字的 `007` 做往返验证；生成那 3098 个文件之后，又用一个独立写的读取器把每一份 front matter 都读了回来，无一读不动。**这两条都不等于「Hugo 能构建」** —— 真跑通之前，别把它当成能用。
+
 ## 不做模板引擎
 
 产出 Markdown，交给 Hugo / Astro / Eleventy / Jekyll —— **每一个现成的主题生态都变成模板库**。自己写一个模板引擎意味着要重新发明布局、分页、RSS、搜索，而那些早就有人做得更好。
@@ -17,7 +65,7 @@ npm test    # node --test，零依赖，不需要 npm install
 
 | | 提供什么 |
 |---|---|
-| canonical | 有什么：标记、作品、长文 |
+| canonical | 有什么：标记、作品、长文、广播 |
 | bundle | 图片的字节 —— canonical 是文本，用 `jq` 就能查，不装二进制 |
 
 **整个过程零网络请求。** 站点也是派生数据，那条不变量在这里同样成立：丢掉产出目录、只靠档案重建，必须能离线跑通。
@@ -56,4 +104,13 @@ CLAUDE.md 里的硬性规则：**用户的编辑追加到 canonical，任何东�
 
 ## 现状
 
-标记、长文、广播都做了。首页只给数字。
+标记、作品、长文、广播都做了。对着八份成链的真实档案：
+
+```
+页面 3098（标记 2940 · 长文 5 · 广播 3394 条归入 152 个月）
+图片 3045 张（封面 2921 + 自己上传的 124）
+3.2 秒 · 128 MB
+全站指向 doubanio.com 的引用：0
+```
+
+最后一行是这里唯一真正要守的数字。**它一旦不是 0，这份备份就又需要豆瓣还在才能看了** —— 而那正是这个项目存在的理由所要否定的东西。
