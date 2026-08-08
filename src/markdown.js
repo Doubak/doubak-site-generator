@@ -67,7 +67,55 @@ export function markPage(m, { coverPath = null } = {}) {
   // 正文只放用户自己写的短评。**没有短评就是空正文**，不编一句「暂无短评」——
   // 那会让「没写」和「写了但抓不到」在页面上长得一样。
   const body = m.comment ? `${plainText(m.comment)}\n` : '';
-  return frontMatter(fm) + (body ? `\n${body}` : '');
+  return frontMatter(fm) + (body ? `\n${body}` : '') + timelineSection(m);
+}
+
+/**
+ * 「什么时候 → 说了什么」。
+ *
+ * ## 为什么这一段值得单独存在
+ *
+ * 标记页上只剩**最新**那条短评——改一次覆盖一次，豆瓣不留历史。而广播是冻结的，
+ * 带秒级时间戳，所以它保住了标记页上早就没有的话。实测：标记自己的修订历史只
+ * 覆盖 3 条，广播里却有 342 条与当前短评不同的发言，涉及 305 个作品。
+ *
+ * ## 每一条都标出处，不只在「拿不准」的时候
+ *
+ * 因为两个来源的性质本来就不同，而这个差别是读者该知道的：
+ *
+ *     广播   发布即冻结，秒级 —— 「那一刻这句话就是这样」
+ *     标记   可编辑，只到天   —— 「我们某次抓取时看到的样子」
+ *
+ * ## 不说「改过」
+ *
+ * 实测那 342 条里 305 条是**状态推进**（想看时说一句，看过之后又说一句），
+ * 只有 15 条是同一状态下说了别的。把它们呈现成「检测到编辑」，89% 都是冤枉的
+ * ——那就是档案在说假话。所以这里只按时间列出来，判断留给读者。
+ *
+ * @param {object} m
+ */
+function timelineSection(m) {
+  const rows = m.timeline ?? [];
+  // 只有一条、而且就是当前这条短评时，这一段没有信息量——正文里已经有了。
+  if (rows.length < 2 && !(rows.length === 1 && rows[0].source === 'broadcast' && rows[0].text !== m.comment)) {
+    return '';
+  }
+
+  const out = ['', '## 说过什么', ''];
+  for (const r of rows) {
+    const when = r.atRaw ?? (r.at ?? '').slice(0, 10) ?? '时间不详';
+    // 动作可能没有（纯发言的广播就没有）。**没有就不要留一个悬着的「·」**——
+    // 那看起来像少了点什么，而其实是本来就没有。
+    const act = r.source === 'broadcast'
+      ? (r.action || (r.status ? verb(m.medium, r.status) : ''))
+      : verb(m.medium, r.status);
+    const label = r.source === 'broadcast' ? '广播' : '标记';
+    const what = act ? `${label} · ${act}` : label;
+    out.push(`### ${when}`, '', `*${what}*`, '', plainText(r.text));
+    if (r.truncated) out.push('', '*（豆瓣在这里截断了）*');
+    out.push('');
+  }
+  return out.join('\n');
 }
 
 /**

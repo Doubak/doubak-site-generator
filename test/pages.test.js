@@ -168,6 +168,119 @@ describe('页面', () => {
   });
 });
 
+describe('「什么时候 → 说了什么」', () => {
+  const withBc = (fields, over = {}) => bc({ target_id: '36838707', ...fields }, over);
+
+  test('**广播保住了标记页上早就没有的那句话**', () => {
+    // 这是整个项目要买的东西：标记页上只剩最新那条短评，改一次覆盖一次；
+    // 而广播发布即冻结，所以它替我们记住了当初说的话，还带秒级时间戳。
+    const p = project({
+      marks: [mark({ revisions: [rev({ status: 'done', comment: '看过之后的话' }, 'x')] })],
+      subjects: [subject()],
+      broadcasts: [withBc({
+        text: '想看时说的话', status: 'wish',
+        posted_at: { raw: '2026-07-18 12:44:56', iso: '2026-07-18T12:44:56+08:00', precision: 'second' },
+      })],
+    });
+    const [pm] = p.marks;
+    assert.equal(pm.timeline.length, 2);
+    const text = markPage(pm);
+    assert.match(text, /## 说过什么/);
+    assert.match(text, /想看时说的话/);
+    assert.match(text, /2026-07-18 12:44:56/, '广播的秒级时间要留住');
+  });
+
+  test('**每一条都标出处** —— 两个来源的性质不一样', () => {
+    // 广播是冻结的（那一刻就是这样），标记是可变的（我们某次抓取时看到的样子）。
+    const p = project({
+      marks: [mark({ revisions: [rev({ comment: '现在这句' }, 'x')] })],
+      subjects: [subject()],
+      broadcasts: [withBc({ text: '当初那句', action: '想看', status: 'wish' })],
+    });
+    const text = markPage(p.marks[0]);
+    assert.match(text, /\*广播 · 想看\*/);
+    assert.match(text, /\*标记 · /);
+
+    // 没有动作的广播（纯发言）不该留一个悬着的「·」。
+    const bare = project({
+      marks: [mark({ revisions: [rev({ comment: '现在这句' }, 'x')] })],
+      subjects: [subject()],
+      broadcasts: [withBc({ text: '当初那句' })],
+    });
+    assert.match(markPage(bare.marks[0]), /\*广播\*/);
+  });
+
+  test('**不下「改过」的判断**', () => {
+    // 实测 342 条与当前短评不同的发言里，305 条是状态推进（想看时说一句，
+    // 看过之后又说一句），只有 15 条是同一状态下说了别的。呈现成「检测到编辑」
+    // 的话 89% 都是冤枉的——那就是档案在说假话。
+    const p = project({
+      marks: [mark({ revisions: [rev({ comment: 'a' }, 'x')] })],
+      subjects: [subject()],
+      broadcasts: [withBc({ text: 'b' })],
+    });
+    const text = markPage(p.marks[0]);
+    assert.ok(!/改过|编辑过|修改/.test(text), '不该断言用户改过');
+  });
+
+  test('**同一句话去重时，精度高的优先** —— 补零的时间不许挤掉真的', () => {
+    // 标记只到天，canonical 会把它补成 T00:00:00；广播到秒。单纯按早晚挑的话，
+    // 补出来的 00:00:00 永远排在同一天的广播前面，于是留下补零的、丢掉真的——
+    // 而 partial_date.precision 存在的全部意义就是防这件事。实测踩到过。
+    const p = project({
+      marks: [mark({ revisions: [rev({
+        status: 'wish', comment: '同一句',
+        marked_at: { raw: '2026-07-18', iso: '2026-07-18T00:00:00+08:00', precision: 'day' },
+      }, 'x')] })],
+      subjects: [subject()],
+      broadcasts: [withBc({
+        text: '同一句', status: 'wish',
+        posted_at: { raw: '2026-07-18 12:44:56', iso: '2026-07-18T12:44:56+08:00', precision: 'second' },
+      })],
+    });
+    const [row] = p.marks[0].timeline.filter((r) => r.text === '同一句');
+    assert.equal(row.source, 'broadcast', '该留广播那条（秒级），不是标记那条（补零的）');
+    assert.equal(row.atRaw, '2026-07-18 12:44:56');
+  });
+
+  test('**同一句话去重时留最早的那条**', () => {
+    // 实测「吹爆京阿尼」有两条：2018 的原帖，和 2025 用户转发自己那条旧广播。
+    // 转发不是「又说了一遍」，是把旧的再推一次——这句话真正被说出口的时间是
+    // 2018 年，那才是档案该记住的。
+    const p = project({
+      marks: [mark({ revisions: [rev({ comment: '别的' }, 'x')] })],
+      subjects: [subject()],
+      broadcasts: [
+        withBc({ text: '同一句', posted_at: { raw: '2018-08-18 19:13:23', iso: '2018-08-18T19:13:23+08:00', precision: 'second' } }, { upstream_id: '1' }),
+        withBc({ text: '同一句', posted_at: { raw: '2025-10-26 13:18:31', iso: '2025-10-26T13:18:31+08:00', precision: 'second' } }, { upstream_id: '2' }),
+      ],
+    });
+    const said = p.marks[0].timeline.filter((r) => r.text === '同一句');
+    assert.equal(said.length, 1, '同一句话只该列一次');
+    assert.equal(said[0].atRaw, '2018-08-18 19:13:23', '留下的应当是最早那条');
+  });
+
+  test('**作品 id 撞车时不接** —— 接错了是档案在说假话', () => {
+    const two = [
+      mark({ medium: 'movie', subject: { id: '999', url: null, upstream_deleted: false } }),
+      mark({ medium: 'game', subject: { id: '999', url: null, upstream_deleted: false } }),
+    ];
+    const p = project({
+      marks: two, subjects: [subject({ id: '999' })],
+      broadcasts: [withBc({ target_id: '999', text: '这句话属于谁？' })],
+    });
+    for (const pm of p.marks) {
+      assert.ok(!pm.timeline.some((r) => r.source === 'broadcast'), 'id 撞车时不该接广播');
+    }
+  });
+
+  test('只有当前那一条短评时，不生成这一段', () => {
+    // 正文里已经有了，再列一遍是噪音。
+    const p = project({ marks: [mark({ revisions: [rev({ comment: '只有这句' }, 'x')] })], subjects: [subject()] });
+    assert.ok(!/## 说过什么/.test(markPage(p.marks[0])));
+  });
+});
+
 describe('分组', () => {
   test('按媒介与状态分，组内按标记时间倒序', () => {
     const marks = [

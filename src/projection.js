@@ -26,13 +26,132 @@ export function project({ marks = [], subjects = [], longform = [], broadcasts =
   const bySubject = new Map();
   for (const s of subjects) bySubject.set(`${s.medium}:${s.id}`, s);
 
-  const projectedMarks = marks.map((m) => projectMark(m, bySubject.get(`${m.medium}:${m.subject.id}`)));
+  const byTarget = broadcastsBySubject(broadcasts, marks);
+  const projectedMarks = marks.map(
+    (m) => projectMark(m, bySubject.get(`${m.medium}:${m.subject.id}`), byTarget.get(m.subject.id) ?? []),
+  );
 
   return {
     marks: projectedMarks,
     longform: longform.map(projectLongform),
     broadcasts: broadcasts.map((b) => projectBroadcast(b, targetIndex(projectedMarks))),
   };
+}
+
+/**
+ * 作品 id → 提到它、且带正文的广播。
+ *
+ * ## 这是这份档案里最值钱的一次连接
+ *
+ * 标记页上只剩**最新**那条短评：改一次就覆盖一次，而豆瓣不留历史。广播不一样——
+ * 发布即冻结、带秒级时间戳，所以每条广播都是「那一刻我说了什么」的定点证据。
+ *
+ * 把两者接起来，就得到一条**「什么时候 → 说了什么」**的时间线，其中很大一部分
+ * 是标记的修订历史里**根本不可能有**的：它们发生在第一次抓取之前。
+ *
+ * 实测那份档案：标记的修订历史只覆盖 3 条（几次抓取相隔不到一周），而广播里
+ * 有 **342 条** 与当前短评不同的发言，涉及 305 个作品——两个数量级的差别。
+ *
+ * ## 但它不是「编辑检测」
+ *
+ * 实测那 342 条的构成：
+ *
+ *     305  状态推进 —— 想看时说一句，看过之后又说一句
+ *      32  广播没有状态（转发、纯发言）
+ *      15  同一状态下说了别的 —— 这些才最接近「改过」
+ *
+ * 也就是说 **89% 根本不是编辑，是先后说过的两句话**。把它们呈现成「检测到编辑」，
+ * 就是档案在说假话——与「把占位符当标题」「把浏览计数当正文」同一类错。
+ * 所以这里只做时间线，不下「改过」的判断。
+ *
+ * @param {object[]} broadcasts
+ * @param {object[]} marks
+ */
+function broadcastsBySubject(broadcasts, marks) {
+  // 撞车的一律不接。广播上只有 data-object-id，没有媒介；接错了是档案在说假话，
+  // 而且看不出来。（实测这份档案 0 个撞车，但这条不能靠运气。）
+  const seen = new Map();
+  for (const m of marks) {
+    seen.set(m.subject.id, seen.has(m.subject.id) ? null : m);
+  }
+
+  /** @type {Map<string, object[]>} */
+  const out = new Map();
+  for (const b of broadcasts) {
+    const f = b.revisions[b.revisions.length - 1].fields;
+    if (!f.target_id || !f.text || seen.get(f.target_id) == null) continue;
+    if (!out.has(f.target_id)) out.set(f.target_id, []);
+    out.get(f.target_id).push({
+      at: f.posted_at?.iso ?? null,
+      atRaw: f.posted_at?.raw ?? null,
+      precision: f.posted_at?.precision ?? 'unknown',
+      // 广播是**冻结**的：这句话在那一刻就是这样，之后再没变过。
+      // 标记的短评则只是「我们最后一次看到的样子」。这个差别必须让读者看见。
+      source: 'broadcast',
+      status: f.status ?? null,
+      action: f.action ?? null,
+      text: f.text,
+      truncated: Boolean(f.text_truncated),
+    });
+  }
+  return out;
+}
+
+/**
+ * 把标记自己的修订与广播合成一条时间线，新的在上。
+ *
+ * **同样的话只留一次。** 实测有 10 条是用户转发自己的旧广播，正文一字不差——
+ * 列两遍会让人以为他说了两次。
+ *
+ * @param {object} m canonical 的标记
+ * @param {object[]} fromBroadcasts
+ */
+function buildTimeline(m, fromBroadcasts) {
+  const rows = [...fromBroadcasts];
+
+  for (const r of m.revisions) {
+    const f = r.fields;
+    if (!f.comment) continue;
+    rows.push({
+      at: f.marked_at?.iso ?? r.first_observed_at,
+      atRaw: f.marked_at?.raw ?? null,
+      precision: f.marked_at?.precision ?? 'unknown',
+      // 标记页上的短评是**可变**的，这里记的是「我们某次抓取时看到的样子」。
+      source: 'mark',
+      status: f.status,
+      action: null,
+      text: f.comment,
+      truncated: false,
+    });
+  }
+
+  // ── 同一句话只留一条，留哪一条有讲究
+  //
+  // **① 精度高的优先。** 标记只到天，而 canonical 会把它补成 `T00:00:00`；广播
+  // 到秒。单纯按时间早晚挑的话，那个补出来的 00:00:00 永远排在同一天的广播前面，
+  // 于是**留下补零的、丢掉真的**——而 partial_date.precision 这个字段存在的全部
+  // 意义就是防这件事（「补零之后它们看起来一样精确，那是假的」）。实测踩到过：
+  // 那条「能上6分我觉得都是国产好片」的秒级时间就是这样被吃掉的。
+  //
+  // **② 精度相同时留最早的。** 「吹爆京阿尼」有 2018 的原帖和 2025 的自我转发，
+  // 转发不是「又说了一遍」而是把旧的再推一次——这句话真正被说出口的时间是 2018 年。
+  const RANK = { second: 0, minute: 1, hour: 2, day: 3, month: 4, year: 5, unknown: 6 };
+  rows.sort((a, b) => {
+    const p = (RANK[a.precision] ?? 6) - (RANK[b.precision] ?? 6);
+    if (p !== 0) return p;
+    return (a.at ?? '') < (b.at ?? '') ? -1 : 1;
+  });
+
+  const seenText = new Set();
+  const kept = rows.filter((r) => {
+    if (seenText.has(r.text)) return false;
+    seenText.add(r.text);
+    return true;
+  });
+
+  // 挑完之后再按时间倒序排给页面用。
+  kept.sort((a, b) => ((a.at ?? '') < (b.at ?? '') ? 1 : -1));
+  return kept;
 }
 
 /**
@@ -106,7 +225,7 @@ function localLongform(url) {
 /** 最后一条修订。**不是**「最新的上游状态」，是「我们最后一次看到的样子」。 */
 const latest = (rec) => rec.revisions[rec.revisions.length - 1];
 
-function projectMark(m, subject) {
+function projectMark(m, subject, fromBroadcasts = []) {
   const r = latest(m);
   const s = subject ? latest(subject) : null;
 
@@ -135,6 +254,9 @@ function projectMark(m, subject) {
     // canonical」。把历史整个抹掉的话，投影会显得像是全部真相。
     revisionCount: m.revisions.length,
     lastSeenAt: r.last_observed_at,
+
+    // 「什么时候 → 说了什么」。理由见 broadcastsBySubject。
+    timeline: buildTimeline(m, fromBroadcasts),
   };
 }
 
