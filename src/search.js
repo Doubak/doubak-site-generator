@@ -37,6 +37,7 @@
  *                            而索引不该替 SSG 做这个决定。
  * @property {string|null} n  标题
  * @property {string[]} [a]   又名（台译名 / 港译名 / 原文名）。搜索时最有用的一项。
+ * @property {string} [w]     可搜的作品信息：导演、作者、类型等。见 indexedInfo。
  * @property {string} c       正文（短评 / 广播正文 / 长文全文）
  * @property {string} d       时间原文
  * @property {string} [k]     媒介或长文类型
@@ -71,6 +72,9 @@ export function buildSearchIndex(p) {
     // undefined 的键整个丢掉，于是「对象里有这个键」与「产出里有这个键」
     // 对不上——测试就是这么发现的。
     if (m.aliases && m.aliases.length) row.a = m.aliases;
+
+    const who = indexedInfo(m.info);
+    if (who) row.w = who;
     rows.push(row);
   }
 
@@ -108,4 +112,35 @@ export function buildSearchIndex(p) {
     + `window.DOUBAK_SEARCH=${JSON.stringify(rows)};\n`;
 
   return { rows, js };
+}
+
+/**
+ * `info` 里哪些进索引。
+ *
+ * ## 不是全都进
+ *
+ * 实测全量塞进去要多 908 KB——索引会翻倍。而里面大半是 ISBN、条形码、片长、
+ * 唱片数这类**没人会拿去搜**的东西。
+ *
+ * ## 主演也不进，这一条是权衡不是遗漏
+ *
+ * 实测：
+ *
+ *     导演 / 编剧 / 作者 / 译者 / 表演者   + 96 KB
+ *     再加上主演                        +435 KB   ← 四倍多
+ *     再加上类型 / 流派                  +472 KB
+ *
+ * 豆瓣的主演动辄二十来个人，绝大多数是龙套。它们让索引涨四倍，换来的是
+ * 「搜一个跑龙套的名字，翻出一部自己毫无印象的片子」。**想要的话把 '主演'
+ * 加进下面这张表就行**——一行的事，代价上面写着。
+ *
+ * @param {Record<string, string[]>|null|undefined} info
+ * @returns {string|undefined}
+ */
+function indexedInfo(info) {
+  if (!info) return undefined;
+  const KEYS = ['导演', '编剧', '作者', '译者', '表演者', '类型', '流派'];
+  const parts = [];
+  for (const k of KEYS) if (info[k]) parts.push(...info[k]);
+  return parts.length ? parts.join(' / ') : undefined;
 }

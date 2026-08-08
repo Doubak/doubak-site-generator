@@ -70,7 +70,35 @@ export function markPage(m, { coverPath = null } = {}) {
   // 正文只放用户自己写的短评。**没有短评就是空正文**，不编一句「暂无短评」——
   // 那会让「没写」和「写了但抓不到」在页面上长得一样。
   const body = m.comment ? `${plainText(m.comment)}\n` : '';
-  return frontMatter(fm) + (body ? `\n${body}` : '') + timelineSection(m);
+  return frontMatter(fm) + (body ? `\n${body}` : '') + infoSection(m) + timelineSection(m);
+}
+
+/**
+ * 详情页上那一块作品信息（导演、主演、出版社、ISBN…）。
+ *
+ * ## 为什么渲染成正文，不塞进 front matter
+ *
+ * 键是豆瓣自己的标签：中文、还带斜杠（`制片国家/地区`）。塞进 YAML 要么得
+ * 全部加引号、要么得改名，而**改名就是翻译**——那是 enricher 的事。
+ * 渲染成一张表则原样保留，读者看到的就是豆瓣当时写的那几个字。
+ *
+ * front matter 里已经有 `douban_meta`（列表页那一行原样记录）。两者不重复也
+ * 不互相替代：一个来自列表页、一个来自详情页，而「页面当时就是这么说的」
+ * 两边都算数。
+ *
+ * @param {object} m
+ */
+function infoSection(m) {
+  const info = m.info;
+  if (!info || !Object.keys(info).length) return '';
+
+  const rows = Object.entries(info)
+    // 又名已经单独显示在上面了，不重复列。
+    .filter(([k]) => k !== '又名')
+    .map(([k, v]) => `| ${plainText(k)} | ${plainText(v.join(' / '))} |`);
+  if (!rows.length) return '';
+
+  return ['', '## 作品信息', '', '| | |', '|---|---|', ...rows, ''].join('\n');
 }
 
 /**

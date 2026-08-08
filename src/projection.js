@@ -289,6 +289,9 @@ function projectMark(m, subject, fromBroadcasts = []) {
     aliases: s?.fields?.aliases ?? [],
     coverUrl: realCover(s?.fields?.cover_url),
     rawMeta: s?.fields?.raw_meta ?? null,
+    // 详情页 #info 那一整块。键是豆瓣自己的标签，原样带过来——
+    // 翻译或跨媒介统一属于 enricher，不是这一层的事。
+    info: s?.fields?.info ?? null,
 
     status: r.fields.status,
     rating: r.fields.rating ?? null,

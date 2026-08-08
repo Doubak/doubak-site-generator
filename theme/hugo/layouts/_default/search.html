@@ -94,7 +94,10 @@
       // 又名与标题同一档：搜「重返沉默之丘」和搜「重返寂静岭」该是一样的。
       var inTitle = (r.n && r.n.toLowerCase().indexOf(lq) >= 0)
         || (alias && alias.toLowerCase().indexOf(lq) >= 0);
-      var inBody = r.c && r.c.toLowerCase().indexOf(lq) >= 0;
+      // 导演 / 作者 / 类型这些与正文同一档：搜一个导演的名字该找得到他的片子，
+      // 但排在标题命中之后。
+      var inBody = (r.c && r.c.toLowerCase().indexOf(lq) >= 0)
+        || (r.w && r.w.toLowerCase().indexOf(lq) >= 0);
       // 标题命中排在正文命中前面。rows 生成时已按时间倒序，
       // 稳定排序会把同一档里的顺序保住，所以不必再比日期。
       if (inTitle || inBody) hits.push({ r: r, rank: inTitle ? 0 : 1, inTitle: inTitle });
@@ -110,11 +113,15 @@
       var title = d.n || (d.t === 'b' ? '广播' : '未知作品');
       var where = KIND[d.t] + (d.k ? ' · ' + (NAMES[d.k] || d.k) : '');
       // 命中的是又名时要把又名显示出来，否则用户会以为搜错了。
+      // 命中的是导演/类型这类信息时也要显示出来，理由与又名相同。
+      var hitInfo = d.w && d.w.toLowerCase().indexOf(lq) >= 0
+        ? '<div class="snip">' + snippet(d.w, lq) + '</div>' : '';
       var hitAlias = d.a && d.a.join(' ').toLowerCase().indexOf(lq) >= 0
         ? '<div class="snip">' + snippet(d.a.join(' / '), lq) + '</div>' : '';
       html += '<div class="hit"><a href="' + esc(d.u) + '.html">' + esc(title) + '</a>'
         + '<div class="meta">' + esc(where) + (d.d ? ' · ' + esc(d.d) : '') + '</div>'
         + hitAlias
+        + hitInfo
         + (d.c ? '<div class="snip">' + snippet(d.c, lq) + '</div>' : '')
         + '</div>';
     }

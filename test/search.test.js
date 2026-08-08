@@ -22,7 +22,7 @@ const proj = (over = {}) => ({
 });
 const pmark = (o = {}) => ({
   medium: 'movie', subjectId: '1292052', title: '霸王别姬', comment: '很好',
-  markedAtRaw: '2026-08-01', status: 'done', aliases: [], ...o,
+  markedAtRaw: '2026-08-01', status: 'done', aliases: [], info: null, ...o,
 });
 const pbc = (o = {}) => ({
   id: '1', text: '说了点什么', postedAtRaw: '2021-11-28 20:25:21', images: [], ...o,
@@ -74,6 +74,27 @@ describe('索引里该有什么', () => {
     const { rows, js } = buildSearchIndex(proj({ marks: [pmark({ aliases: [] })] }));
     assert.ok(!('a' in rows[0]));
     assert.deepEqual(JSON.parse(js.slice(js.indexOf('=') + 1, js.lastIndexOf(';'))), rows);
+  });
+
+  test('**导演 / 作者 / 类型进索引，主演不进** —— 这是权衡不是遗漏', () => {
+    // 实测：导演+编剧+作者+译者+表演者 只加 96 KB，再加上主演就是 435 KB。
+    // 豆瓣的主演动辄二十来个龙套，换来的是「搜一个跑龙套的名字，翻出一部
+    // 自己毫无印象的片子」。
+    const { rows } = buildSearchIndex(proj({
+      marks: [pmark({ info: {
+        导演: ['克里斯托夫·甘斯'], 主演: ['龙套甲', '龙套乙'],
+        类型: ['恐怖'], IMDb: ['tt22868010'],
+      } })],
+    }));
+    assert.match(rows[0].w, /克里斯托夫·甘斯/);
+    assert.match(rows[0].w, /恐怖/);
+    assert.ok(!/龙套/.test(rows[0].w), '主演不该进索引');
+    assert.ok(!/tt22868010/.test(rows[0].w), 'IMDb 号没人拿去搜');
+  });
+
+  test('没有 info 时不要那个键', () => {
+    const { rows } = buildSearchIndex(proj({ marks: [pmark({ info: null })] }));
+    assert.ok(!('w' in rows[0]));
   });
 
   test('按时间倒序', () => {
