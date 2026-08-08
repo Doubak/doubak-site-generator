@@ -33,6 +33,28 @@ const SEP = '\r\n\r\n';
 export function indexImages(root) {
   /** @type {Map<string, {dir: string, row: object}>} */
   const out = new Map();
+  /**
+   * 作品 id → 那张封面。
+   *
+   * ## 为什么不能只按 URL 找
+   *
+   * canonical 里的 `cover_url` 取自**列表页的缩略图**，而档案里存的是**详情页的
+   * 封面**——多数媒介两者恰好是同一个文件，但不是全部。实测舞台剧：
+   *
+   *     列表页  …/pview/drama_subject_poster/small/public/561e90f2.jpg
+   *     详情页  …/pview/drama_subject_poster/m/public/561e90f2.jpg
+   *
+   * 只按 URL 找的话，这类封面全部落空——实测 95 张，而它们**明明就在档案里**。
+   *
+   * 所以再建一张按作品 id 的表。id 从封面那条记录的 parent（作品详情页）的 URL 上
+   * 取——那条边正是为「整张抓取图可以离线重建」而存在的（规范 §6.2），这里是它
+   * 第一次被真的用上。
+   * @type {Map<string, {dir: string, row: object}>}
+   */
+  const bySubject = new Map();
+  /** capture_id → 那条记录的 URL，用来把封面接回它的作品详情页。 */
+  const captureUrl = new Map();
+
   for (const name of readdirSync(root)) {
     const dir = join(root, name);
     let idxName;
@@ -44,13 +66,26 @@ export function indexImages(root) {
     for (const line of readFileSync(join(dir, idxName), 'utf-8').split('\n')) {
       if (!line.trim()) continue;
       const row = JSON.parse(line);
-      if (row.surface !== 'asset' || row.verdict !== 'ok') continue;
+      if (row.verdict !== 'ok') continue;
+      if (row.intent === 'interest.item') { captureUrl.set(row.capture_id, row.url); continue; }
+      if (row.surface !== 'asset') continue;
       // 同一张图可能在多份档案里都有。**留最新的那条**——它们字节相同（sha256 会
       // 证明），但取新的能少读一个旧的大段文件。
       out.set(row.url, { dir, row });
+
+      if (row.route_key === 'asset.subject_cover' && row.parent_capture_id) {
+        const id = subjectIdOf(captureUrl.get(row.parent_capture_id) ?? '');
+        if (id) bySubject.set(id, { dir, row });
+      }
     }
   }
-  return out;
+  return { byUrl: out, bySubject };
+}
+
+/** 从作品详情页的 URL 里取 id。五种媒介五种形状，与抓取那边同一套。 */
+function subjectIdOf(url) {
+  const m = /(?:\/subject\/|douban\.com\/(?:game|app)\/|\/location\/drama\/)(\d+)/.exec(url);
+  return m ? m[1] : null;
 }
 
 /** 从 Content-Type 推一个扩展名。认不出来就用 .bin —— 不猜。 */
@@ -124,29 +159,45 @@ export function payload(dir, row) {
  *   `missing` 是**档案里没有的**图。它们不该被静默忽略：那意味着站点上会缺一张图，
  *   而缺的原因（那次抓取被拦下了 / 那条路线还没做）是用户该知道的。
  */
-export function exportImages({ index, wanted, outDir, urlPrefix = '/' }) {
+export function exportImages({ index, wanted, wantedBySubject = new Map(), outDir, urlPrefix = '/' }) {
   /** @type {Record<string, string>} */
   const paths = {};
+  /** @type {Record<string, string>} */
+  const bySubject = {};
   /** @type {string[]} */
   const missing = [];
   let written = 0;
 
-  for (const url of wanted) {
-    const hit = index.get(url);
-    if (!hit) { missing.push(url); continue; }
-
+  const write = (hit) => {
     const sub = hit.row.route_key === 'asset.subject_cover' ? 'covers' : 'uploads';
-    const name = fileNameFor(url, hit.row.content_type);
-    const rel = `${sub}/${name}`;
+    const rel = `${sub}/${fileNameFor(hit.row.url, hit.row.content_type)}`;
     const abs = join(outDir, rel);
-
     if (!existsSync(abs)) {
       mkdirSync(dirname(abs), { recursive: true });
       writeFileSync(abs, payload(hit.dir, hit.row));
       written += 1;
     }
-    paths[url] = `${urlPrefix}${rel}`;
+    return `${urlPrefix}${rel}`;
+  };
+
+  // 先按作品 id 找封面——那是档案里**真的有**的那一张。
+  for (const id of wantedBySubject) {
+    const hit = index.bySubject.get(id);
+    if (hit) bySubject[id] = write(hit);
+  }
+
+  for (const url of wanted) {
+    const hit = index.byUrl.get(url);
+    if (!hit) {
+      // **按 URL 找不到 ≠ 这张图缺了。** 作品封面多半已经被上面那轮按 id 找到了
+      // （列表页缩略图与详情页封面是同一张图的两个尺寸）。这里只记录**两条路都
+      // 落空**的，否则「缺 95 张」会把一个已经解决的问题天天报给用户看。
+      missing.push(url);
+      continue;
+    }
+
+    paths[url] = write(hit);
   }
   releaseSegments();
-  return { paths, written, missing };
+  return { paths, bySubject, written, missing };
 }

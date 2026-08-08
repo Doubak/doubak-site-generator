@@ -48,7 +48,7 @@ function projectMark(m, subject) {
     // 投影层**不许**拿它填空：那会让占位符一路传到页面标题、外部检索、导出文件里。
     title: s?.fields?.title ?? null,
     upstreamDeleted: Boolean(m.subject.upstream_deleted),
-    coverUrl: s?.fields?.cover_url ?? null,
+    coverUrl: realCover(s?.fields?.cover_url),
     rawMeta: s?.fields?.raw_meta ?? null,
 
     status: r.fields.status,
@@ -113,4 +113,19 @@ export function groupMarks(projectedMarks) {
     }
   }
   return out;
+}
+
+/**
+ * 豆瓣的「暂无封面」占位图当成没有封面。
+ *
+ * 与「上游被删时作品名保持 null」是同一条规则：**占位符不是内容**。
+ * `/cuphead/` 与 `/f/` 是豆瓣的前端静态资源目录，抓取时刻意不存（那不是内容，
+ * 而且每个没海报的作品都是同一张）。原样带过去的话，页面上会留一个指向
+ * doubanio 的 URL——那让一份号称离线可看的备份，为了一张本来就不存在的图去联网。
+ *
+ * @param {string|null|undefined} url
+ */
+function realCover(url) {
+  if (!url) return null;
+  return /\/(cuphead|f)\//.test(url) ? null : url;
 }

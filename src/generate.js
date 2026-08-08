@@ -42,6 +42,8 @@ export function generate({ canonical, bundlesDir, outDir, clean = true }) {
 
   // ── 图片
   let paths = {};
+  /** @type {Record<string, string>} 作品 id → 本地封面路径 */
+  let coverBySubject = {};
   let imageStats = { written: 0, missing: [] };
   if (bundlesDir) {
     const wanted = new Set();
@@ -53,16 +55,40 @@ export function generate({ canonical, bundlesDir, outDir, clean = true }) {
       }
     }
     const res = exportImages({
-      index: indexImages(bundlesDir), wanted, outDir: join(outDir, 'static'),
+      index: indexImages(bundlesDir),
+      wanted,
+      // **按作品 id 再找一遍封面。** canonical 里的 cover_url 取自列表页缩略图，
+      // 而档案里存的是详情页封面——多数媒介两者恰好同一个文件，舞台剧那种不是。
+      // 只按 URL 找会漏掉 95 张明明就在档案里的图。
+      wantedBySubject: new Set(p.marks.map((m) => m.subjectId)),
+      outDir: join(outDir, 'static'),
     });
     paths = res.paths;
-    imageStats = { written: res.written, missing: res.missing };
+    coverBySubject = res.bySubject;
+    // 按 URL 找不到、但按作品 id 找到了的，不算缺——那是同一张图的两个尺寸。
+    // 不筛掉的话「缺 95 张」会成为一条永远存在、且已经不成立的告警，
+    // 而一条天天出现的假告警会让真的那条也被忽略。
+    const coveredUrls = new Set(
+      p.marks.filter((m) => res.bySubject[m.subjectId] && m.coverUrl).map((m) => m.coverUrl),
+    );
+    imageStats = {
+      written: res.written,
+      // 占位图也不算缺。`/cuphead/`、`/f/` 是豆瓣的前端静态资源目录，抓取时就
+      // **刻意不存**（那不是内容，而且每个没海报的作品都是同一张）。剩下的 6 张
+      // 正是墓碑作品——它们本来就没有封面。
+      //
+      // 这一条与上面那条是同一个意思：**告警要么是真的，要么就不该出现。**
+      // 一条永远在的假告警会让真的那条也被忽略。
+      missing: res.missing.filter((u) => !coveredUrls.has(u) && !/\/(cuphead|f)\//.test(u)),
+    };
   }
 
   // ── 页面
   const files = [];
   for (const m of p.marks) {
-    files.push([join('content', markPath(m)), markPage(m, { coverPath: paths[m.coverUrl] ?? null })]);
+    // 按作品 id 找到的优先——那是档案里真的有的那一张。按 URL 找到的作为退路。
+    const cover = coverBySubject[m.subjectId] ?? paths[m.coverUrl] ?? null;
+    files.push([join('content', markPath(m)), markPage(m, { coverPath: cover })]);
   }
   for (const r of p.longform) {
     files.push([join('content', longformPath(r)), longformPage(r, { images: paths })]);

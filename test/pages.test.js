@@ -115,6 +115,23 @@ describe('页面', () => {
     assert.match(markPage(p), /douban_cover: "https:\/\/img1\.doubanio\.com/);
   });
 
+  test('**豆瓣的「暂无封面」占位图当成没有封面**', () => {
+    // 与上面那条「作品名保持 null」是同一条规则：占位符不是内容。原样带过去的话，
+    // 页面上会留一个指向 doubanio 的 URL——让一份号称离线可看的备份，
+    // 为了一张本来就不存在的图去联网。
+    const s = subject({ revisions: [{
+      parser_version: 'p/1', first_observed_at: 'x', last_observed_at: 'x',
+      fields: {
+        title: null, raw_meta: null,
+        cover_url: 'https://img1.doubanio.com/cuphead/ilmen-static/pics/subject/game_normal.png',
+      },
+      digests: {}, observations: [],
+    }] });
+    const [p] = project({ marks: [mark()], subjects: [s] }).marks;
+    assert.equal(p.coverUrl, null);
+    assert.match(markPage(p), /^douban_cover: null$/m);
+  });
+
   test('文件名用 id 不用标题', () => {
     // 标题会变、可能是 null、还可能撞名。id 稳定，固定链接才不会在重新生成之后变。
     const [p] = project({ marks: [mark()], subjects: [subject()] }).marks;
