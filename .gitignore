@@ -5,3 +5,6 @@
 site-out/
 public/
 node_modules/
+
+# 部署时的暂存目录
+.deploy-stage/

@@ -5,7 +5,8 @@
 ```sh
 npm run md    -- <canonical 目录> <bundle 目录> [产出目录]   # 只出 Markdown + 图片
 npm run site  -- <canonical 目录> <bundle 目录> [产出目录]   # 再构建成 HTML
-npm run serve -- <canonical 目录> <bundle 目录> [产出目录]   # 再起个预览
+npm run serve  -- <canonical 目录> <bundle 目录> [产出目录]  # 再起个预览
+npm run deploy -- <canonical 目录> <bundle 目录> <仓库目录>  # 铺进仓库，GitHub Pages 直接发
 npm test                                                    # node --test，零依赖
 ```
 
@@ -122,6 +123,25 @@ npm run md -- <canonical> <bundles> <out>
 - **`date: null`**（8 个文件）。豆瓣没记标记时间的那几条老标记。Jekyll 与 Eleventy 容得下，**Astro 的 content collections 会卡住**：schema 里得写 `z.date().nullable()` 而不是 `z.date()`。
 - **文件名是作品 id，不带日期**（`movie/1309046.md`）。Jekyll 的 `_posts/` 要求 `YYYY-MM-DD-name.md`，所以这些会被当成 page 而不是 post。想要 post 的话得改名 —— 但那样固定链接就跟着标题/日期走了，而**用 id 做文件名正是为了让固定链接在重新生成之后不变**。
 - **`static/` 的图用绝对路径引用**（`/covers/x.jpg`）。Astro 放 `public/`、Jekyll 放站点根，路径都对得上；换成会加 base path 的部署（GitHub Pages 的项目页）时要自己处理前缀。
+
+## 发布到 GitHub Pages
+
+```sh
+npm run deploy -- <canonical> <bundles> <仓库目录> --dry-run   # 先看清楚要公开什么
+npm run deploy -- <canonical> <bundles> <仓库目录>             # 再真铺
+```
+
+**`npm run site` 的产出不能直接推。** 它是一个 Hugo 工程（`content/` `layouts/` `hugo.toml` `static/` `public/`），而 GitHub Pages 发布的是**仓库根** —— 推上去它会在根目录找 `index.html`，找不到。要发布的其实只是 `public/` 里的东西。
+
+`deploy` 做的就是这件事：构建到暂存目录（构建失败不该把仓库搞成半成品），再把 `public/` 平铺到仓库根，顺带
+
+- 写一个 `.nojekyll`。不写的话 GitHub 会拿 Jekyll 再处理一遍，而**下划线开头的路径会被它静默吞掉**。现在的产出里没有，但这不该靠运气。
+- 保住 `CNAME` `LICENSE` `README.md` `.git` `.github` `.gitignore` —— 它们是仓库的东西，不是站点的。
+- **删掉上一次留下、这次不该再有的文件。** 不删会留下幽灵页面：有固定链接、能打开、内容看着正常，只是早就不在数据里了。
+
+`--dry-run` 只看不写。默认也会先把「会公开什么」摆出来 —— 这一步是**把私人档案变成公开网页，而且不可逆**：推出去就被抓取、被缓存了。
+
+活的例子：[sample.doubak.com](https://sample.doubak.com)（[仓库](https://github.com/Doubak/doubak-site-generator-sample)）。
 
 ## 列表页与链接
 

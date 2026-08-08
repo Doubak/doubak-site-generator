@@ -16,7 +16,8 @@
     "md": "node bin/generate.js --no-theme",
     "site": "node bin/site.js",
     "serve": "node bin/site.js --serve",
-    "hugo": "node bin/hugo.js"
+    "hugo": "node bin/hugo.js",
+    "deploy": "node bin/deploy.js"
   },
   "dependencies": {},
   "devDependencies": {}
