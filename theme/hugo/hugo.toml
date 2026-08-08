@@ -8,12 +8,18 @@
 # content/ 与 static/ 一个字都不用动。**那才是「交给现成的 SSG」的意思。**
 
 baseURL = '/'
-languageCode = 'zh-cn'
+# Hugo 0.158 起 languageCode 改叫 locale。老版本会忽略不认识的键，所以写新的更安全。
+locale = 'zh-cn'
 title = '我的豆瓣存档'
 
 # 站点是纯静态的，也**不该**有任何外部请求。这份备份存在的理由就是不再依赖豆瓣，
 # 那么它自己也不该去依赖字体 CDN、统计脚本、评论服务。
 disableKinds = ['rss', 'sitemap']
+
+[taxonomies]
+  # 只留 tags。Hugo 默认还会建 categories，而我们从不写这个键——
+  # 于是产出里多出一堆空的分类页，看起来像是有内容而其实没有。
+  tag = 'tags'
 
 [pagination]
   # 影视有 2102 条。一页全铺出来就是两千多张图，谁也打不开。

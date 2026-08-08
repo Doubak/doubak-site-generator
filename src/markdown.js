@@ -66,7 +66,7 @@ export function markPage(m, { coverPath = null } = {}) {
 
   // 正文只放用户自己写的短评。**没有短评就是空正文**，不编一句「暂无短评」——
   // 那会让「没写」和「写了但抓不到」在页面上长得一样。
-  const body = m.comment ? `${m.comment}\n` : '';
+  const body = m.comment ? `${plainText(m.comment)}\n` : '';
   return frontMatter(fm) + (body ? `\n${body}` : '');
 }
 
@@ -97,6 +97,13 @@ export function longformPage(r, { images = {} } = {}) {
   for (const [url, path] of Object.entries(images)) {
     if (body.includes(url)) body = body.split(url).join(path);
   }
+  // 正文里**混着两种东西**：用户写的字，和解析器插进去的 `![](url)` 图片标记。
+  // 只能转义前者——把图片标记也转义掉，图就变成一行字面文本了。
+  // 所以按图片标记切开，只转义中间那些段。
+  body = body
+    .split(/(!\[\]\([^)]*\))/)
+    .map((seg, i) => (i % 2 === 1 ? seg : plainText(seg)))
+    .join('');
   return frontMatter(fm) + (body ? `\n${body}\n` : '');
 }
 
@@ -168,7 +175,7 @@ export function broadcastMonthPage(month, list, { images = {} } = {}) {
       out.push('');
     }
 
-    if (b.text) out.push(b.text, '');
+    if (b.text) out.push(plainText(b.text), '');
     for (const url of b.images) {
       // 没导出的图保持原样：留一个指向 doubanio 的 URL，总比悄悄删掉一张图好
       // ——前者至少说明「这儿本来有图」。
@@ -195,4 +202,54 @@ export function broadcastMonthPath(month) {
  */
 export function monthOf(b) {
   return (b.postedAtRaw ?? b.postedAt ?? '').slice(0, 7) || '未知';
+}
+
+/**
+ * 把**用户自己写的字**转义成 Markdown 里的字面文本。
+ *
+ * ## 为什么非有不可
+ *
+ * 正文是交给 Markdown 渲染的，而用户写的字里满是 Markdown 的活字符。实测那份
+ * 真实档案的 2831 段自撰文本，有 62 段会被悄悄改写，其中两类是真的丢东西：
+ *
+ *     _(:з」∠)_          → <em>(:з」∠)</em>   下划线被吃掉，整句变斜体（实测 24 处）
+ *     From <May December> → From              **整个片名消失**（goldmark 当它是裸 HTML）
+ *
+ * 第二类尤其严重：页面上什么都不剩，看不出这儿本来有字。**一份会悄悄改写你写过
+ * 的话的存档，比没有存档更糟**——它看起来是可信的。
+ *
+ * ## 为什么不是打开 `unsafe = true`
+ *
+ * 那会让用户文本里的 HTML 真的执行。广播和日记里到处是别人的名字和内容，而这个
+ * 项目还要往 GitHub Pages 上推——把任意 HTML 当标记渲染是往外发布路径上开的口子。
+ * 何况那也不对：豆瓣的广播是纯文本，任何 Markdown 解释都是失真。
+ *
+ * ## 转义策略是量出来的
+ *
+ * 尖括号与 `&` 用 HTML 实体（反斜杠对它们无效），其余行内记号用反斜杠，块首记号
+ * 只在行首转义——`a-b` 里的连字符不该被动，`- item` 里的必须被动。
+ *
+ * @param {string|null|undefined} s
+ * @returns {string} 渲染之后与输入逐字相同的 Markdown
+ */
+export function plainText(s) {
+  if (!s) return '';
+  return s
+    // 反斜杠必须第一个处理，否则会把后面加的反斜杠又转义一遍。
+    .replace(/\\/g, '\\\\')
+    // `&` `<` `>` 反斜杠转义无效（CommonMark 只允许转义 ASCII 标点里的特定几个，
+    // 而裸 HTML 的识别发生在更早的阶段），必须用实体。
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/([`*_[\]~])/g, '\\$1')
+    // 块首记号只在行首有意义。全局转义会把 `a-b` 写成 `a\-b`，源码难看，
+    // 而且那个连字符本来就不会被解释成列表。
+    .split('\n')
+    .map((line) => line
+      .replace(/^(\s*)([#+=|-])(\s|$)/, '$1\\$2$3')
+      // 有序列表要转义的是**那个点**，不是数字。CommonMark 不允许转义数字，
+      // `\1.` 会原样渲染成一个反斜杠加 1 —— 实测确认过。
+      .replace(/^(\s*)(\d+)([.)])(\s|$)/, '$1$2\\$3$4'))
+    .join('\n');
 }

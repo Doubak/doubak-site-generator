@@ -17,7 +17,7 @@ import { generate } from '../src/generate.js';
 import { project, groupMarks } from '../src/projection.js';
 import {
   markPage, longformPage, markPath, longformPath, verb,
-  broadcastMonthPage, broadcastMonthPath, monthOf,
+  broadcastMonthPage, broadcastMonthPath, monthOf, plainText,
 } from '../src/markdown.js';
 
 /** 造一条 canonical 标记。 */
@@ -344,5 +344,71 @@ describe('Hugo 骨架', () => {
 
     const missing = [...used].filter((k) => !emitted.has(k));
     assert.deepEqual(missing, [], `模板引用了生成器不写的键：${missing.join(' ')}`);
+  });
+});
+
+describe('用户写的字必须原样呈现', () => {
+  // 这一组是拿真的 Hugo 量出来的，不是照 CommonMark 规范推的。
+  // 实测那份档案 2831 段自撰文本里有 62 段会被 Markdown 悄悄改写。
+
+  test('**颜文字不许变成斜体** —— 实测 24 处', () => {
+    // `_(:з」∠)_` 被渲染成 <em>(:з」∠)</em>，下划线连同语气一起没了。
+    // 这是中文互联网最常见的那个颜文字，而它恰好长得像 Markdown 的强调。
+    assert.equal(plainText('_(:з」∠)_'), '\\_(:з」∠)\\_');
+    assert.equal(plainText('(*/ ω \\*)'), '(\\*/ ω \\\\\\*)');
+  });
+
+  test('**尖括号里的字不许整个消失**', () => {
+    // `From <May December>` 在页面上只剩 `From ` —— goldmark 当 <May December>
+    // 是裸 HTML 直接丢掉。这一类最严重：页面上什么都不剩，看不出这儿本来有字。
+    assert.equal(plainText('From <May December>'), 'From &lt;May December&gt;');
+  });
+
+  test('反斜杠先转，否则会把后加的反斜杠又转一遍', () => {
+    assert.equal(plainText('C:\\path'), 'C:\\\\path');
+  });
+
+  test('块首记号只在行首转义 —— `a-b` 不该被动', () => {
+    assert.equal(plainText('a-b 正常'), 'a-b 正常');
+    assert.equal(plainText('- 列表'), '\\- 列表');
+    assert.equal(plainText('第一行\n- 第二行'), '第一行\n\\- 第二行');
+  });
+
+  test('**有序列表转义的是点，不是数字**', () => {
+    // CommonMark 不允许转义数字：`\\1.` 会原样渲染成一个反斜杠加 1。
+    // 实测确认过——这是唯一一条推错了、被 Hugo 纠正过来的规则。
+    assert.equal(plainText('1. one'), '1\\. one');
+  });
+
+  test('三条正文路径都转义了', () => {
+    const [pm] = project({
+      marks: [mark({ revisions: [rev({ comment: '_(:з」∠)_' }, 'x')] })], subjects: [subject()],
+    }).marks;
+    assert.match(markPage(pm), /\\_\(:з」∠\)\\_/);
+
+    assert.match(broadcastMonthPage('2021-11', [{
+      postedAtRaw: '2021-11-02 10:00:00', text: 'From <May December>',
+      images: [], action: null, target: null,
+    }]), /From &lt;May December&gt;/);
+  });
+
+  test('**长文正文里解析器插的图片标记不许被转义**', () => {
+    // 正文混着两种东西：用户写的字，和解析器插进去的 ![](url)。
+    // 一起转义的话，图就变成一行字面文本了。
+    const [p] = project({ longform: [{
+      kind: 'note', upstream_id: '1', url: null,
+      revisions: [{
+        parser_version: 'p/1', first_observed_at: 'x', last_observed_at: 'x',
+        fields: {
+          title: 't', published_at: null,
+          body: '_颜文字_\n\n![](https://img1.doubanio.com/x/a.jpg)\n\n后面 <tag> 的字',
+        },
+        digests: {}, observations: [],
+      }],
+    }] }).longform;
+    const text = longformPage(p, { images: { 'https://img1.doubanio.com/x/a.jpg': '/uploads/a.jpg' } });
+    assert.match(text, /!\[\]\(\/uploads\/a\.jpg\)/, '图片标记被转义了');
+    assert.match(text, /\\_颜文字\\_/);
+    assert.match(text, /&lt;tag&gt;/);
   });
 });
