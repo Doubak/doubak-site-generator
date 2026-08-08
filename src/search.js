@@ -36,6 +36,7 @@
  *                            扩展名由消费者补——它取决于 SSG 的固定链接方案，
  *                            而索引不该替 SSG 做这个决定。
  * @property {string|null} n  标题
+ * @property {string[]} [a]   又名（台译名 / 港译名 / 原文名）。搜索时最有用的一项。
  * @property {string} c       正文（短评 / 广播正文 / 长文全文）
  * @property {string} d       时间原文
  * @property {string} [k]     媒介或长文类型
@@ -53,7 +54,8 @@ export function buildSearchIndex(p) {
   for (const m of p.marks) {
     // **没有标题也要收。** 上游被删的作品标题是 null，而用户自己写的短评
     // 还在——那恰恰是最该搜得到的东西。
-    rows.push({
+    /** @type {SearchRow} */
+    const row = {
       t: 'm',
       u: `${m.medium}/${m.subjectId}`,
       n: m.title,
@@ -61,7 +63,15 @@ export function buildSearchIndex(p) {
       d: m.markedAtRaw ?? '',
       k: m.medium,
       s: m.status,
-    });
+    };
+    // 又名单独一个字段：既要能搜，也要能在结果里显示出来——搜「重返沉默之丘」
+    // 却只看到《重返寂静岭》的话，用户会以为搜错了。
+    //
+    // **没有就不要这个键，而不是设成 undefined。** JSON.stringify 会把
+    // undefined 的键整个丢掉，于是「对象里有这个键」与「产出里有这个键」
+    // 对不上——测试就是这么发现的。
+    if (m.aliases && m.aliases.length) row.a = m.aliases;
+    rows.push(row);
   }
 
   for (const b of p.broadcasts) {

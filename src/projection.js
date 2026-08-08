@@ -283,6 +283,10 @@ function projectMark(m, subject, fromBroadcasts = []) {
     // 投影层**不许**拿它填空：那会让占位符一路传到页面标题、外部检索、导出文件里。
     title: s?.fields?.title ?? null,
     upstreamDeleted: Boolean(m.subject.upstream_deleted),
+    // 又名：台译名、港译名、原文名。**只有作品详情页上有**，而它正是搜索时
+    // 最有用的一项——记得住《重返沉默之丘》却想不起《寂静岭2》的人，
+    // 没有它就什么都搜不到。
+    aliases: s?.fields?.aliases ?? [],
     coverUrl: realCover(s?.fields?.cover_url),
     rawMeta: s?.fields?.raw_meta ?? null,
 

@@ -50,6 +50,9 @@ export function markPage(m, { coverPath = null } = {}) {
     douban_status: m.status,
     douban_verb: verb(m.medium, m.status),
     douban_rating: m.rating,
+    // 无语言标注——豆瓣的又名里混着粤语、台湾译名、英文与各种转写，一个标记
+    // 都没有。猜语言属于 enricher（它的产出带 source 与置信度、可以重跑）。
+    douban_aliases: m.aliases ?? [],
     douban_subject_id: m.subjectId,
     douban_url: m.url,
     douban_marked_at_raw: m.markedAtRaw,

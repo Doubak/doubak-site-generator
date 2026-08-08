@@ -22,7 +22,7 @@ const proj = (over = {}) => ({
 });
 const pmark = (o = {}) => ({
   medium: 'movie', subjectId: '1292052', title: '霸王别姬', comment: '很好',
-  markedAtRaw: '2026-08-01', status: 'done', ...o,
+  markedAtRaw: '2026-08-01', status: 'done', aliases: [], ...o,
 });
 const pbc = (o = {}) => ({
   id: '1', text: '说了点什么', postedAtRaw: '2021-11-28 20:25:21', images: [], ...o,
@@ -57,6 +57,23 @@ describe('索引里该有什么', () => {
     for (const r of rows) assert.ok(!/\.(html|md)$/.test(r.u), `${r.u} 不该带扩展名`);
     assert.equal(rows.find((r) => r.t === 'm').u, 'movie/1292052');
     assert.equal(rows.find((r) => r.t === 'b').u, 'broadcast/2021-11');
+  });
+
+  test('**又名进索引** —— 它是搜索时最有用、别处又拿不到的一项', () => {
+    // 实测那 2011 个有又名的作品里装着的是台译名、港译名、原文名：
+    //   重返寂静岭 → 重返沉默之丘(台) / 重返鬼魅山房 / 寂静岭2真人版
+    // 记得住《重返沉默之丘》却想不起《寂静岭2》的人，没有它就什么都搜不到。
+    const { rows } = buildSearchIndex(proj({
+      marks: [pmark({ title: '重返寂静岭', aliases: ['重返沉默之丘(台)', '寂静岭2真人版'] })],
+    }));
+    assert.deepEqual(rows[0].a, ['重返沉默之丘(台)', '寂静岭2真人版']);
+  });
+
+  test('没有又名时**不要那个键**，而不是设成 undefined', () => {
+    // JSON.stringify 会把 undefined 的键整个丢掉，于是对象与产出对不上。
+    const { rows, js } = buildSearchIndex(proj({ marks: [pmark({ aliases: [] })] }));
+    assert.ok(!('a' in rows[0]));
+    assert.deepEqual(JSON.parse(js.slice(js.indexOf('=') + 1, js.lastIndexOf(';'))), rows);
   });
 
   test('按时间倒序', () => {
@@ -111,6 +128,11 @@ describe('搜索页', () => {
     // 用户写的字里有尖括号很正常（实测「From <May December>」）。
     const snip = html.slice(html.indexOf('function snippet'), html.indexOf('function run'));
     assert.match(snip, /esc\(s\.slice\(0, j\)\) \+ '<mark>' \+ esc\(/);
+  });
+
+  test('**又名与标题同一档** —— 搜台译名和搜大陆译名该是一样的', () => {
+    assert.match(html, /r\.a \? r\.a\.join/);
+    assert.match(html, /inTitle = \(r\.n/);
   });
 
   test('零结果就说零结果', () => {
