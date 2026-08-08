@@ -260,6 +260,61 @@ describe('「什么时候 → 说了什么」', () => {
     assert.equal(said[0].atRaw, '2018-08-18 19:13:23', '留下的应当是最早那条');
   });
 
+  test('**同一次标记只算一次** —— 广播给时间，标记给短评', () => {
+    // 一次「看过」会同时出现在广播里（带秒、常常没短评）和标记的修订里
+    // （有短评、只到天）。列两遍等于说他标了两次。
+    const p = project({
+      marks: [mark({ revisions: [rev({
+        status: 'done', comment: '看完的感想',
+        marked_at: { raw: '2026-07-19', iso: '2026-07-19T00:00:00+08:00', precision: 'day' },
+      }, 'x')] })],
+      subjects: [subject()],
+      broadcasts: [withBc({
+        text: null, status: 'done', action: '看过',
+        posted_at: { raw: '2026-07-19 19:18:39', iso: '2026-07-19T19:18:39+08:00', precision: 'second' },
+      })],
+    });
+    const tl = p.marks[0].timeline;
+    assert.equal(tl.length, 1, '同一天同一个状态该合成一条');
+    assert.equal(tl[0].atRaw, '2026-07-19 19:18:39', '时间取精度高的那个');
+    assert.equal(tl[0].text, '看完的感想', '短评取有的那个 —— 两样都不该丢');
+  });
+
+  test('**时间与短评来自不同来源时要说清楚**', () => {
+    // 不说的话，「广播 · 看过」加一段短评会被读成「那条广播里写着这句话」，
+    // 而广播里其实什么都没写。
+    const p = project({
+      marks: [mark({ revisions: [rev({
+        status: 'done', comment: '看完的感想',
+        marked_at: { raw: '2026-07-19', iso: '2026-07-19T00:00:00+08:00', precision: 'day' },
+      }, 'x')] })],
+      subjects: [subject()],
+      broadcasts: [withBc({ text: null, status: 'done', action: '看过',
+        posted_at: { raw: '2026-07-19 19:18:39', iso: '2026-07-19T19:18:39+08:00', precision: 'second' } })],
+    });
+    assert.match(markPage(p.marks[0]), /时间来自广播，短评来自标记页/);
+  });
+
+  test('**没有短评的状态也进时间线** —— 那是「什么时候标的」的答案', () => {
+    // 实测 1721 个作品页此前一点历史都没有，而广播里记着它们的全过程。
+    const p = project({
+      marks: [mark({ revisions: [rev({ status: 'done', comment: null }, 'x')] })],
+      subjects: [subject()],
+      broadcasts: [
+        withBc({ text: null, status: 'wish', action: '想看',
+          posted_at: { raw: '2023-03-24 21:06:37', iso: '2023-03-24T21:06:37+08:00', precision: 'second' } }, { upstream_id: '1' }),
+        withBc({ text: null, status: 'doing', action: '在看',
+          posted_at: { raw: '2023-03-31 21:43:38', iso: '2023-03-31T21:43:38+08:00', precision: 'second' } }, { upstream_id: '2' }),
+      ],
+    });
+    const st = p.marks[0].timeline.map((r) => r.status);
+    assert.ok(st.includes('wish') && st.includes('doing'), '想看与在看都该在');
+    const text = markPage(p.marks[0]);
+    assert.match(text, /2023-03-24 21:06:37/);
+    // 没有短评就只有那一行，**不编一句「无短评」**。
+    assert.ok(!/无短评|暂无/.test(text));
+  });
+
   test('**作品 id 撞车时不接** —— 接错了是档案在说假话', () => {
     const two = [
       mark({ medium: 'movie', subject: { id: '999', url: null, upstream_deleted: false } }),
@@ -372,6 +427,17 @@ describe('广播', () => {
     }]);
     assert.match(bare, /^想看$/m);
     assert.ok(!/douban\.com/.test(bare));
+  });
+
+  test('**没有动作词的广播也要接回作品页**', () => {
+    // 第一版把链接挂在 if (b.action) 里，于是转发、纯发言这类没有动作词、
+    // 却明确指着某个作品的广播在页面上与那个作品完全断开——而 target_id
+    // 就在数据里。断开的理由是代码结构而不是数据没有，那就是 bug。
+    const text = broadcastMonthPage('2021-11', [{
+      postedAtRaw: '2021-11-02 10:00:00', text: '随便说说', images: [],
+      action: null, target: { medium: 'movie', subjectId: '123', title: '某片' },
+    }]);
+    assert.match(text, /\[某片\]\(\.\.\/movie\/123\.md\)/);
   });
 
   test('**作品 id 撞车时一律不接** —— 接错了比不接严重得多', () => {

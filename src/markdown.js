@@ -96,10 +96,14 @@ export function markPage(m, { coverPath = null } = {}) {
  */
 function timelineSection(m) {
   const rows = m.timeline ?? [];
-  // 只有一条、而且就是当前这条短评时，这一段没有信息量——正文里已经有了。
-  if (rows.length < 2 && !(rows.length === 1 && rows[0].source === 'broadcast' && rows[0].text !== m.comment)) {
-    return '';
-  }
+  // 什么时候这一段没有信息量：**只有一条，而且它是标记自己那条**——
+  // 正文里已经有短评，front matter 里已经有日期，再列一遍是噪音。
+  //
+  // 但只要那一条来自广播，它就带来了正文里没有的东西：**准确到秒的时间**。
+  // 标记页上只有天（`douban_marked_at_raw`），而「2026-07-19 19:18:39」这种
+  // 精度只有广播给得出——丢掉它，就等于把广播这条路线最值钱的性质扔了。
+  if (rows.length === 0) return '';
+  if (rows.length === 1 && rows[0].source !== 'broadcast') return '';
 
   const out = ['', '## 说过什么', ''];
   for (const r of rows) {
@@ -110,10 +114,18 @@ function timelineSection(m) {
       ? (r.action || (r.status ? verb(m.medium, r.status) : ''))
       : verb(m.medium, r.status);
     const label = r.source === 'broadcast' ? '广播' : '标记';
-    const what = act ? `${label} · ${act}` : label;
-    out.push(`### ${when}`, '', `*${what}*`, '', plainText(r.text));
-    if (r.truncated) out.push('', '*（豆瓣在这里截断了）*');
-    out.push('');
+    // 时间与短评来自不同来源时要说清楚。不说的话，「广播 · 玩过」加一段短评
+    // 会被读成「那条广播里写着这句话」——而广播里其实什么都没写，那句短评
+    // 在标记页上。
+    const mixed = r.text && r.textSource && r.textSource !== r.source;
+    const what = mixed
+      ? `${act || label} · 时间来自${label}，短评来自${r.textSource === 'mark' ? '标记页' : '广播'}`
+      : (act ? `${label} · ${act}` : label);
+    out.push(`### ${when}`, '', `*${what}*`, '');
+    // 没有短评就只有这一行——**不编一句「无短评」**，那会让「没写」和
+    // 「写了但抓不到」在页面上长得一样。
+    if (r.text) out.push(plainText(r.text), '');
+    if (r.truncated) out.push('*（豆瓣在这里截断了）*', '');
   }
   return out.join('\n');
 }
@@ -225,12 +237,14 @@ export function broadcastMonthPage(month, list, { images = {} } = {}) {
     //
     // 相对文件路径没有这个问题：它说的是「那份文件在这儿」，由 SSG 自己去决定
     // 它最终的 URL 长什么样（Hugo 的 link render hook 会把 `.md` 换成实际后缀）。
-    if (b.action) {
-      const t = b.target;
-      out.push(t && t.title
-        ? `${b.action} [${t.title}](../${t.medium}/${t.subjectId}.md)`
-        : b.action);
-      out.push('');
+    // **动作可以没有，链接不该跟着没有。** 第一版把作品链接挂在 `if (b.action)`
+    // 里面，于是一条没有动作词、却明确指着某个作品的广播（转发、纯发言）在页面上
+    // 与那个作品完全断开——而它的 target_id 就在数据里。实测只影响 1 条，
+    // 但断开的理由是「代码结构」而不是「数据没有」，那就是个 bug。
+    const t = b.target;
+    const link = t && t.title ? `[${t.title}](../${t.medium}/${t.subjectId}.md)` : null;
+    if (b.action || link) {
+      out.push([b.action, link].filter(Boolean).join(' '), '');
     }
 
     if (b.text) out.push(plainText(b.text), '');
