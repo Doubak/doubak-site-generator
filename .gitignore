@@ -1,0 +1,7 @@
+# 下载来的 Hugo 二进制。钉死版本 + 校验和，随时可以删了重下。
+.hugo/
+
+# 生成的站点是派生数据，不进版本库。
+site-out/
+public/
+node_modules/

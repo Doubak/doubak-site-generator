@@ -5,9 +5,19 @@
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
-  "engines": { "node": ">=20" },
-  "bin": { "doubak-site": "./bin/generate.js" },
-  "scripts": { "test": "node --test \"test/**/*.test.js\"" },
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "doubak-site": "./bin/generate.js"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "generate": "node bin/generate.js",
+    "site": "node bin/site.js",
+    "serve": "node bin/site.js --serve",
+    "hugo": "node bin/hugo.js"
+  },
   "dependencies": {},
   "devDependencies": {}
 }

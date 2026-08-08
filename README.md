@@ -3,25 +3,30 @@
 豆备 (Doubak) 的静态网页生成器。把 [canonical](https://github.com/Doubak/doubak-data-specs) 数据转成 **Markdown + YAML front matter**，交给现成的静态站生成器渲染 —— 就像浏览自己开的豆瓣一样。
 
 ```sh
-node bin/generate.js <canonical 目录> <bundle 目录> [产出目录] [--no-theme]
-npm test    # node --test，零依赖，不需要 npm install
+npm run site  -- <canonical 目录> <bundle 目录> [产出目录]   # 生成 + 构建成 HTML
+npm run serve -- <canonical 目录> <bundle 目录> [产出目录]   # 生成 + 起预览
+npm test                                                    # node --test，零依赖
 ```
 
-需要 Node ≥ 20。
+需要 Node ≥ 20。**不用 `npm install`** —— 依赖是空的，见下。
 
-## 从档案到能看的站点
+## 从档案到能打开的网页
 
 ```sh
 # 1. 抓取产出的一堆 bundle → canonical
 cd doubak-data-parser
 node bin/parse.js ~/downloads/20260806 ~/downloads/20260806-canonical
 
-# 2. canonical + bundle → 静态站源目录
+# 2. canonical + bundle → HTML
 cd ../doubak-site-generator
-node bin/generate.js ~/downloads/20260806-canonical ~/downloads/20260806 ~/downloads/20260806-site
+npm run site -- ~/downloads/20260806-canonical ~/downloads/20260806 ~/downloads/20260806-site
 ```
 
+跑完直接**双击 `public/index.html`** 就能看，不用起服务器（下面「不用服务器」一节说为什么）。
+
 第二步为什么还要 bundle：canonical 是纯文本（用 `jq` 就能查，不装二进制），**图片的字节在 bundle 里**。两个输入一个都不能少。
+
+只要 Markdown、不要 HTML 的话用 `npm run generate`（参数一样，多一个 `--no-theme` 可以连骨架也不要）。
 
 产出：
 
@@ -35,28 +40,40 @@ node bin/generate.js ~/downloads/20260806-canonical ~/downloads/20260806 ~/downl
 ├── static/
 │   ├── covers/            作品封面
 │   └── uploads/           自己上传的图（广播附图、日记内嵌图）
-├── hugo.toml              ↓ 这两个是自带的最小 Hugo 骨架，--no-theme 可以不要
-└── layouts/
+├── hugo.toml              ↓ 自带的最小 Hugo 骨架
+├── layouts/
+└── public/                ← 构建出来的 HTML，双击 index.html 就能看
 ```
 
-## 直接就能看：自带一个最小 Hugo 骨架
+## Hugo 从哪来：不在 `dependencies` 里
 
-生成器**默认**会把 `theme/hugo/` 一并拷进产出目录，所以产出的就是一个能直接跑的 Hugo 站点：
+第一次 `npm run site` 会自己把 Hugo 下下来（约 20 MB，存在 `.hugo/`，之后复用）。但它**不是 npm 依赖** —— `dependencies` 是空的，而且会一直是空的。
 
-```sh
-node bin/generate.js ~/downloads/20260806-canonical ~/downloads/20260806 ~/downloads/20260806-site
-cd ~/downloads/20260806-site && hugo server
-```
+npm 上那些 `hugo-bin` 之类的包做的恰好就是这件事——下载官方二进制——只是外面裹了一层几百个包的依赖树。而这个项目的整个论点是可审计与长命：**一个要装几百个包才能重建的存档站是自相矛盾的。**
 
-```
-20260806-site/
-├── hugo.toml        ← 骨架
-├── layouts/         ← 骨架
-├── content/         ← 生成的
-└── static/          ← 生成的
-```
+所以自己下，四十行（`src/hugo-bin.js`），三条规矩：
 
-选 Hugo 是因为它是**单个二进制**，没有依赖树 —— 这份东西的整个论点是可审计与长命，而一个要装几百个 npm 包才能重建的存档站是自相矛盾的。另外 `content/` + `static/` 这个布局本来就是 Hugo 的，少一层适配。
+- **版本钉死**在 `HUGO_VERSION`，不取 `latest`。存档站要能在几年后逐字节重建，而 `latest` 意味着同一份档案在不同时间会生成出不同的站点。
+- **SHA-256 写在仓库里**，不是下载完再从同一个地方取校验和（那只是「信任第一次」，证明不了什么）。写在仓库里的值任何人都能自己核：
+  ```sh
+  curl -sSfL https://github.com/gohugoio/hugo/releases/download/v0.164.0/hugo_0.164.0_checksums.txt
+  ```
+  对不上就**响亮地报错**，不是警告一声继续 —— 这东西是要在你机器上执行的。
+- **PATH 上有 hugo 就用 PATH 上的**，不下载。你自己装的那个是你选的，不该被悄悄换掉。
+
+自动下载只覆盖 Linux：Hugo 0.164 的 macOS 只发 `.pkg`、Windows 发 `.zip`。那两个平台请自己装（`brew install hugo` / `winget install Hugo.Hugo`），装完 `npm run site` 会认。
+
+## 不用服务器也能看
+
+骨架里开了 `relativeURLs = true`，所以产出里全是相对路径 —— **双击 `public/index.html` 就能看**。实测抽查 120 个页面、1481 个相对链接，断链 0。
+
+默认的绝对路径在 `file://` 下全是断的（浏览器会去找文件系统根目录）。这一条对这份东西格外重要：它要在很多年后被人从一块硬盘上打开，那时候「起一个静态服务器」不该是先决条件。
+
+## 自带的那个 Hugo 骨架
+
+生成器默认把 `theme/hugo/` 一并拷进产出目录，所以产出的就是一个能直接跑的 Hugo 站点。
+
+选 Hugo 是因为它是**单个二进制**，没有依赖树；另外 `content/` + `static/` 这个布局本来就是 Hugo 的，少一层适配。
 
 骨架**不发任何外部请求**：样式内联、字体用系统栈、没有统计脚本、没有评论服务。这份备份存在的理由是不再需要豆瓣还活着才能看，那它自己也不该需要某个 CDN 还活着才好看。
 
@@ -65,7 +82,7 @@ cd ~/downloads/20260806-site && hugo server
 它刻意只有五个文件，**就是为了让你删掉它**：
 
 ```sh
-node bin/generate.js <canonical> <bundles> <out> --no-theme    # 只出 content/ 与 static/
+npm run generate -- <canonical> <bundles> <out> --no-theme    # 只出 content/ 与 static/
 ```
 
 换成任何一个现成的 Hugo 主题：删掉 `layouts/`，照那个主题的说明配置，**`content/` 与 `static/` 一个字都不用动**。换成 Astro / Eleventy / Jekyll 也一样，只是目录名不同（Astro 是 `src/content/` 与 `public/`，Jekyll 是 `_posts/` 与站点根）。
@@ -157,9 +174,11 @@ CLAUDE.md 里的硬性规则：**用户的编辑追加到 canonical，任何东�
 标记、作品、长文、广播都做了。对着八份成链的真实档案：
 
 ```
-生成   页面 3098（标记 2940 · 长文 5 · 广播 3394 条归入 152 个月）
-       图片 3045 张（封面 2921 + 自己上传的 124）· 2.9 秒 · 128 MB
-构建   Hugo 0.164 · 零警告零错误 · 3803 页 · 2.8 秒 · 4596 个 HTML / 147 MB
+一条命令   npm run site -- <canonical> <bundles> <out>
+生成       页面 3098（标记 2940 · 长文 5 · 广播 3394 条归入 152 个月）
+           图片 3045 张（封面 2921 + 自己上传的 124）· 2.9 秒 · 128 MB
+构建       Hugo 0.164 · 零警告零错误 · 3803 页 · 2.8 秒 · 4596 个 HTML / 147 MB
+可离线看   相对链接 1481 个（抽查 120 页），断链 0；双击 index.html 即可
 ```
 
 守住的那条：**页面打开时零外部 `src`。** 它一旦不是 0，这份备份就又需要豆瓣还在才能看了 —— 而那正是这个项目存在的理由所要否定的东西。
