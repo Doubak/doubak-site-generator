@@ -246,7 +246,10 @@ describe('广播', () => {
       postedAtRaw: '2021-11-02 10:00:00', text: null, images: [],
       action: '想看', target: { medium: 'movie', subjectId: '37450627', title: '痴迷' },
     }]);
-    assert.match(linked, /想看 \[痴迷\]\(\/movie\/37450627\/\)/);
+    // **链接指向那个 .md 文件，不是某种 URL 方案。** 硬编码 `/movie/123/` 的话，
+    // SSG 一改固定链接方案（Hugo 的 uglyURLs 就够了）这些链接就全断——
+    // 而 file:// 下浏览器会把它们显示成目录列表。
+    assert.match(linked, /想看 \[痴迷\]\(\.\.\/movie\/37450627\.md\)/);
 
     // **url 必须给上**：不给的话回退根本无从发生，这条测试就只是在测「undefined
     // 不会被拼进字符串」，而那不是要守的性质。

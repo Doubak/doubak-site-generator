@@ -3,7 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ if .IsHome }}{{ .Site.Title }}{{ else }}{{ .Title }} · {{ .Site.Title }}{{ end }}</title>
+{{/* 板块名要用中文。Hugo 会从目录名自动生成一个英文复数当标题（movie → Movies），
+     那东西出现在浏览器标签页和书签里，而这份档案通篇是中文。 */}}
+{{ $name := .Title }}
+{{ if .IsSection }}{{ $name = index .Site.Params.mediumnames .Section | default .Title }}{{ end }}
+<title>{{ if .IsHome }}{{ .Site.Title }}{{ else }}{{ $name }} · {{ .Site.Title }}{{ end }}</title>
 {{/*
   样式全部内联，**一个外部请求都不发**。
 
@@ -54,7 +58,9 @@ h3 { font-size: 1rem; margin: 1.8rem 0 .5rem; font-weight: 600; }
 }
 .grid .t { font-size: .86rem; line-height: 1.4; margin-top: .45rem; }
 .grid .m { font-size: .78rem; color: var(--dim); }
-.pager { margin-top: 2.5rem; display: flex; gap: 1rem; font-size: .9rem; }
+.pager { margin-top: 2.5rem; display: flex; flex-wrap: wrap; gap: .3rem .8rem; align-items: baseline; font-size: .9rem; }
+.pager a, .pager strong { padding: .1rem .35rem; }
+.pager strong { background: var(--line); border-radius: 3px; }
 article img { max-width: 100%; height: auto; border-radius: 3px; }
 blockquote {
   margin: 1rem 0; padding: .1rem 0 .1rem 1rem;
@@ -71,10 +77,10 @@ footer.site .wrap { padding: 1.2rem; font-size: .85rem; color: var(--dim); }
 <body>
 
 <header class="site"><div class="wrap">
-  <a class="home" href="{{ "/" | relURL }}">{{ .Site.Title }}</a>
+  <a class="home" href="{{ .Site.Home.RelPermalink }}">{{ .Site.Title }}</a>
   <nav>
     {{ range .Site.Sections.ByTitle }}
-      <a href="{{ .RelPermalink }}">{{ index $.Site.Params.mediumNames .Section | default .Title }}</a>
+      <a href="{{ .RelPermalink }}">{{ index $.Site.Params.mediumnames .Section | default .Title }}</a>
     {{ end }}
   </nav>
 </div></header>

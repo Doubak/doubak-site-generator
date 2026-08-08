@@ -1,65 +1,93 @@
 {{ define "main" }}
 
 {{ $isMedia := in (slice "movie" "book" "music" "game" "drama") .Section }}
+{{ $isBroadcast := eq .Section "broadcast" }}
 {{/* Hugo 会把 [params] 里的键全部转成小写，所以这里写 mediumnames 而不是 mediumNames。 */}}
 {{ $names := .Site.Params.mediumnames }}
 
 <h1>{{ index $names .Section | default .Title }}</h1>
 
-{{ .Content }}
-
 {{ if $isMedia }}
   {{/*
-    按状态分组：想看 / 在看 / 看过 是三件不同的事，混在一起按时间排看不出名堂。
+    ## 为什么这里分页，而不是按状态分组一次铺完
 
-    组名直接取页面里的 douban_verb —— 动词跟着媒介走（「看过一本书」是错的说法），
-    而那个判断生成器里已经做过了，这里不重做。
+    先前是「按状态分成三组、全部铺出来」。看着整齐，实际不能用：影视有 2102 条，
+    一页两千多张图。改成分页，状态退成每张卡片上的一个词，另外在顶上给一行汇总。
 
-    这里**不分页**，让一个 section 一次铺完。影视有 2102 条，看起来像是应该分页，
-    但按状态分组之后再分页会把组切碎（Hugo 的分页器作用在整个 .Pages 上）。
-    图片都带 loading="lazy"，实际只加载看得见的那些。
+    汇总那一行是**在整个 section 上算的，不是在当前这一页上算的**——
+    「看过 1336」必须是总数。写成当前页的话它会随翻页而变，而一个会变的计数
+    比没有计数更糟：它看起来是个事实。
   */}}
-  {{ range .Pages.GroupByParam "douban_status" }}
-    {{ $verb := "" }}
-    {{ range first 1 .Pages }}{{ $verb = .Params.douban_verb }}{{ end }}
-    <h2>{{ $verb | default .Key }} <span class="dim">{{ len .Pages }}</span></h2>
-    <ul class="grid">
-      {{ range .Pages }}
-        <li>
-          <a href="{{ .RelPermalink }}">
-            {{ with .Params.douban_cover }}
-              <img src="{{ . }}" alt="" loading="lazy">
-            {{ else }}
-              {{/* 上游被删的作品就是没有封面。豆瓣的占位图不是内容，生成器已经把它去掉了。 */}}
-              <div class="nocover">无封面</div>
-            {{ end }}
-            <div class="t">{{ .Title }}</div>
-            {{ with .Params.douban_rating }}<div class="m">{{ . }} 星</div>{{ end }}
-          </a>
-        </li>
-      {{ end }}
-    </ul>
+  <p class="dim">
+    {{ range .Pages.GroupByParam "douban_status" }}
+      {{ $verb := "" }}{{ range first 1 .Pages }}{{ $verb = .Params.douban_verb }}{{ end }}
+      {{ $verb | default .Key }} {{ len .Pages }}{{ if not (eq .Key "wish") }} · {{ end }}
+    {{ end }}
+  </p>
+
+  {{ $paginator := .Paginate .Pages.ByDate.Reverse }}
+  <ul class="grid">
+    {{ range $paginator.Pages }}
+      <li>
+        <a href="{{ .RelPermalink }}">
+          {{ with .Params.douban_cover }}
+            <img src="{{ . }}" alt="" loading="lazy">
+          {{ else }}
+            {{/* 上游被删的作品就是没有封面。豆瓣的占位图不是内容，生成器已经把它去掉了。 */}}
+            <div class="nocover">无封面</div>
+          {{ end }}
+          <div class="t">{{ .Title }}</div>
+          <div class="m">
+            {{ .Params.douban_verb }}
+            {{ with .Params.douban_rating }} · {{ . }} 星{{ end }}
+          </div>
+        </a>
+      </li>
+    {{ end }}
+  </ul>
+  {{ partial "pager.html" $paginator }}
+
+{{ else if $isBroadcast }}
+  {{/*
+    ## 广播是一条时间线，翻页翻的是时间线本身
+
+    不是「152 个月份的目录」——那样要点两次才看得到一条广播，而广播恰恰是这份
+    档案里最该被读到的东西。所以这里直接把每个月的正文渲染出来，一页几个月，
+    一直翻到底。
+
+    每页 4 个月（实测平均每月 22 条，约等于一页 90 条）。月份本身仍然有各自的
+    固定链接，从下面每段的标题进去。
+  */}}
+  <p class="dim">
+    共 {{ len .Pages }} 个月 ·
+    {{ $n := 0 }}{{ $t := 0 }}
+    {{ range .Pages }}{{ $n = add $n (.Params.douban_count | default 0) }}{{ $t = add $t (.Params.douban_with_text | default 0) }}{{ end }}
+    {{ $n }} 条广播，其中 {{ $t }} 条带正文
+  </p>
+  <blockquote>广播发布后不可编辑，所以每条都是那一刻的原话。</blockquote>
+
+  {{ $paginator := .Paginate .Pages.ByDate.Reverse 4 }}
+  {{ range $paginator.Pages }}
+    <section class="entry">
+      <h2><a href="{{ .RelPermalink }}">{{ .Title }}</a>
+        <span class="dim">{{ .Params.douban_count }} 条</span></h2>
+      {{ .Content }}
+    </section>
   {{ end }}
+  {{ partial "pager.html" $paginator }}
 
 {{ else }}
-  {{/* 日记、评论、广播：一条一行，倒序。广播那些页本身就是「某年某月」，这层只是目录。 */}}
+  {{/* 日记与评论：数量少，一条一行足够。 */}}
   {{ $paginator := .Paginate .Pages.ByDate.Reverse }}
   <ul>
     {{ range $paginator.Pages }}
       <li>
         <a href="{{ .RelPermalink }}">{{ .Title }}</a>
-        {{ with .Params.douban_count }}<span class="dim">{{ . }} 条</span>{{ end }}
-        {{ with .Params.douban_with_text }}<span class="dim">带正文 {{ . }}</span>{{ end }}
+        {{ with .Params.douban_published_at_raw }}<span class="dim">{{ . }}</span>{{ end }}
       </li>
     {{ end }}
   </ul>
-  {{ if or $paginator.HasPrev $paginator.HasNext }}
-    <div class="pager">
-      {{ if $paginator.HasPrev }}<a href="{{ $paginator.Prev.URL }}">← 上一页</a>{{ end }}
-      <span class="dim">{{ $paginator.PageNumber }} / {{ $paginator.TotalPages }}</span>
-      {{ if $paginator.HasNext }}<a href="{{ $paginator.Next.URL }}">下一页 →</a>{{ end }}
-    </div>
-  {{ end }}
+  {{ partial "pager.html" $paginator }}
 {{ end }}
 
 {{ end }}

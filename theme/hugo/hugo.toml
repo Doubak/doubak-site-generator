@@ -18,6 +18,15 @@ baseURL = '/'
 # 那时候「起一个静态服务器」不该是先决条件。
 relativeURLs = true
 
+# **和 relativeURLs 是一套的，缺一不可。**
+#
+# 默认 Hugo 把每页写成 `book/index.html`，链接指向 `book/`——而浏览器在
+# file:// 下打开一个目录，显示的是**目录列表**，不是里面的 index.html。
+# 于是站内每一个链接都会掉进一堆编号文件夹里。
+#
+# uglyURLs 让链接直接指到文件，file:// 下才真的能用。
+uglyURLs = true
+
 # Hugo 0.158 起 languageCode 改叫 locale。老版本会忽略不认识的键，所以写新的更安全。
 locale = 'zh-cn'
 title = '我的豆瓣存档'
@@ -34,6 +43,11 @@ disableKinds = ['rss', 'sitemap']
 [pagination]
   # 影视有 2102 条。一页全铺出来就是两千多张图，谁也打不开。
   pagerSize = 48
+
+[markup.goldmark.renderHooks.link]
+  # 让 Hugo 把正文里 `../movie/123.md` 这种**指向文件**的链接，解析成它自己那套
+  # 固定链接。生成器不该猜 SSG 的 URL 方案——它只说「那份文件在这儿」。
+  useEmbedded = "fallback"
 
 [markup.goldmark.renderer]
   # 正文是**用户自己写的字**，原样渲染。豆瓣的短评里有尖括号、颜文字、

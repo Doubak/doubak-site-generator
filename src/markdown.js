@@ -167,10 +167,20 @@ export function broadcastMonthPage(month, list, { images = {} } = {}) {
 
     // 动作那一行：「想看 《某电影》」。接得回本地作品页就接，接不回来就只留文字
     // ——**不回退到豆瓣的 URL**，那会让一份号称离线可看的档案去联网。
+    //
+    // 链接指向**那个 .md 文件的相对路径**，不是某种 URL。
+    //
+    // 第一版写的是 `/movie/123/`，也就是把一种固定链接方案硬编码进了 Markdown
+    // 里——而那个方案是 SSG 的，不是我们的。实测的后果：Hugo 开了 uglyURLs 之后
+    // 页面是 `movie/123.html`，那些链接全部指向不存在的目录；在 file:// 下更糟，
+    // 浏览器会显示一个目录列表。
+    //
+    // 相对文件路径没有这个问题：它说的是「那份文件在这儿」，由 SSG 自己去决定
+    // 它最终的 URL 长什么样（Hugo 的 link render hook 会把 `.md` 换成实际后缀）。
     if (b.action) {
       const t = b.target;
       out.push(t && t.title
-        ? `${b.action} [${t.title}](/${t.medium}/${t.subjectId}/)`
+        ? `${b.action} [${t.title}](../${t.medium}/${t.subjectId}.md)`
         : b.action);
       out.push('');
     }

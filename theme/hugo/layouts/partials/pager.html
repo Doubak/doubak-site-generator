@@ -1,0 +1,28 @@
+{{/*
+  翻页条。
+
+  **首末页也要给出可点的相邻页**，而不是只有「上一页 / 下一页」——3394 条广播
+  分成三十几页，只靠相邻翻是走不到底的。所以中间给一段页码。
+*/}}
+{{ if gt .TotalPages 1 }}
+  <nav class="pager">
+    {{ if .HasPrev }}<a href="{{ .Prev.URL }}">← 上一页</a>{{ end }}
+
+    {{ $cur := .PageNumber }}
+    {{ range .Pagers }}
+      {{ $n := .PageNumber }}
+      {{/* 只显示当前页附近，加上首尾——几十页全列出来会把翻页条撑成一堵墙。 */}}
+      {{ if or (le $n 1) (ge $n $.TotalPages) (and (ge $n (sub $cur 2)) (le $n (add $cur 2))) }}
+        {{ if eq $n $cur }}
+          <strong>{{ $n }}</strong>
+        {{ else }}
+          <a href="{{ .URL }}">{{ $n }}</a>
+        {{ end }}
+      {{ else if or (eq $n (sub $cur 3)) (eq $n (add $cur 3)) }}
+        <span class="dim">…</span>
+      {{ end }}
+    {{ end }}
+
+    {{ if .HasNext }}<a href="{{ .Next.URL }}">下一页 →</a>{{ end }}
+  </nav>
+{{ end }}
