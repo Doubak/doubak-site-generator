@@ -9,7 +9,10 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { project, groupMarks } from '../src/projection.js';
-import { markPage, longformPage, markPath, longformPath, verb } from '../src/markdown.js';
+import {
+  markPage, longformPage, markPath, longformPath, verb,
+  broadcastMonthPage, broadcastMonthPath, monthOf,
+} from '../src/markdown.js';
 
 /** 造一条 canonical 标记。 */
 const mark = (over = {}) => ({
@@ -177,5 +180,99 @@ describe('分组', () => {
       { medium: 'movie', status: 'done', markedAt: '2020-01-01' },
     ]);
     assert.deepEqual(g.get('movie').get('done').map((m) => m.markedAt), ['2020-01-01', null]);
+  });
+});
+
+/** 造一条 canonical 广播。 */
+const bc = (fields, over = {}) => ({
+  canonical_version: 'canonical/1.0',
+  identity_layer: 'upstream_id',
+  upstream_id: '3669403283',
+  url: 'https://www.douban.com/people/82160871/status/3669403283/',
+  revisions: [{
+    parser_version: 'p/1',
+    first_observed_at: '2026-08-01T00:00:00+08:00',
+    last_observed_at: '2026-08-01T00:00:00+08:00',
+    fields: {
+      posted_at: { raw: '2021-11-28 20:25:21', iso: '2021-11-28T20:25:21+08:00', precision: 'second' },
+      text: null, action: null, status: null, target_type: null, target_id: null, images: [],
+      ...fields,
+    },
+    digests: {}, observations: [],
+  }],
+  ...over,
+});
+
+describe('广播', () => {
+  test('按月归档，月内倒序', () => {
+    // 头插列表，新的在上。这与抓取方向、与「上面的都抓到了」那个不变量一致。
+    const list = [
+      { postedAtRaw: '2021-11-02 10:00:00', postedAt: '2021-11-02T10:00:00+08:00', text: '早', images: [], action: null, target: null },
+      { postedAtRaw: '2021-11-28 20:25:21', postedAt: '2021-11-28T20:25:21+08:00', text: '晚', images: [], action: null, target: null },
+    ];
+    const text = broadcastMonthPage('2021-11', list);
+    assert.ok(text.indexOf('晚') < text.indexOf('早'), '月内应当倒序');
+    assert.match(text, /^title: "2021年11月"$/m);
+    assert.equal(broadcastMonthPath('2021-11'), 'broadcast/2021-11.md');
+  });
+
+  test('**按本地时间切月，不按 UTC**', () => {
+    // canonical 的时间戳带 +08:00。按 UTC 切的话，每月头八小时的广播会掉到
+    // 上一个月去——一个不报错、只让归档悄悄错位的 bug。
+    assert.equal(monthOf({ postedAtRaw: '2021-11-01 03:00:00', postedAt: '2021-11-01T03:00:00+08:00' }), '2021-11');
+  });
+
+  test('**带正文的条数单独给** —— 总数里大部分是纯标记动作', () => {
+    // 实测 3394 条里只有 804 条带正文。只报总数会让「我写了多少东西」看起来
+    // 比实际多四倍。
+    const list = [
+      { postedAtRaw: '2021-11-02 10:00:00', text: '写了字', images: [], action: null, target: null },
+      { postedAtRaw: '2021-11-03 10:00:00', text: null, images: [], action: '想看', target: null },
+    ];
+    const text = broadcastMonthPage('2021-11', list);
+    assert.match(text, /^douban_count: 2$/m);
+    assert.match(text, /^douban_with_text: 1$/m);
+  });
+
+  test('接得回本地作品页就接，接不回来只留文字 —— **不回退到豆瓣 URL**', () => {
+    // 回退到豆瓣的话，一份号称离线可看的档案会为了一个链接去联网。
+    const linked = broadcastMonthPage('2021-11', [{
+      postedAtRaw: '2021-11-02 10:00:00', text: null, images: [],
+      action: '想看', target: { medium: 'movie', subjectId: '37450627', title: '痴迷' },
+    }]);
+    assert.match(linked, /想看 \[痴迷\]\(\/movie\/37450627\/\)/);
+
+    // **url 必须给上**：不给的话回退根本无从发生，这条测试就只是在测「undefined
+    // 不会被拼进字符串」，而那不是要守的性质。
+    const bare = broadcastMonthPage('2021-11', [{
+      postedAtRaw: '2021-11-02 10:00:00', text: null, images: [], action: '想看', target: null,
+      url: 'https://www.douban.com/people/82160871/status/3669403283/',
+    }]);
+    assert.match(bare, /^想看$/m);
+    assert.ok(!/douban\.com/.test(bare));
+  });
+
+  test('**作品 id 撞车时一律不接** —— 接错了比不接严重得多', () => {
+    // 广播上只有 data-object-id，没有媒介。撞了还硬接的话，页面上会出现一条
+    // 指向另一部作品的链接：不接只是少个链接，接错了是档案在说假话，而且看不出来。
+    const marks = [
+      { canonical_version: 'c', identity_layer: 'upstream_id', upstream_id: '1',
+        account: {}, medium: 'movie', subject: { id: '999', url: null, upstream_deleted: false },
+        revisions: [rev({}, 'x')] },
+      { canonical_version: 'c', identity_layer: 'upstream_id', upstream_id: '2',
+        account: {}, medium: 'game', subject: { id: '999', url: null, upstream_deleted: false },
+        revisions: [rev({}, 'x')] },
+    ];
+    const p = project({ marks, subjects: [], broadcasts: [bc({ action: '想看', target_id: '999' })] });
+    assert.equal(p.broadcasts[0].target, null, 'id 撞车时不该接');
+  });
+
+  test('附图换成本地路径', () => {
+    const p = project({ broadcasts: [bc({ images: ['https://img1.doubanio.com/x/p1.jpg'] })] });
+    assert.deepEqual(p.broadcasts[0].images, ['https://img1.doubanio.com/x/p1.jpg']);
+    const text = broadcastMonthPage('2021-11', p.broadcasts, {
+      images: { 'https://img1.doubanio.com/x/p1.jpg': '/uploads/p1.jpg' },
+    });
+    assert.match(text, /!\[\]\(\/uploads\/p1\.jpg\)/);
   });
 });

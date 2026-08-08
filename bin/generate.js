@@ -27,12 +27,16 @@ const r = generate({
     marks: read('marks.ndjson'),
     subjects: read('subjects.ndjson'),
     longform: read('longform.ndjson'),
+    broadcasts: read('broadcasts.ndjson'),
   },
   bundlesDir,
   outDir,
 });
 
-console.log(`页面 ${r.pages}（标记 ${r.marks} · 长文 ${r.longform}）· 图片 ${r.images.written} 张 · ${Date.now() - t0} ms → ${outDir}/`);
+console.log(
+  `页面 ${r.pages}（标记 ${r.marks} · 长文 ${r.longform} · 广播 ${r.broadcasts} 条归入 ${r.broadcastMonths} 个月）`
+  + ` · 图片 ${r.images.written} 张 · ${Date.now() - t0} ms → ${outDir}/`,
+);
 
 // **缺图要说出来。** 静默忽略的话，站点上会缺一张图而没人知道为什么——
 // 而原因（那次抓取被拦下了／那条路线还没做）恰恰是用户该知道的。

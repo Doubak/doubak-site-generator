@@ -17,17 +17,68 @@
  */
 
 /**
- * @param {object[]} marks     canonical 的 marks.ndjson
- * @param {object[]} subjects  canonical 的 subjects.ndjson
- * @param {object[]} longform  canonical 的 longform.ndjson
+ * @param {object[]} marks       canonical 的 marks.ndjson
+ * @param {object[]} subjects    canonical 的 subjects.ndjson
+ * @param {object[]} longform    canonical 的 longform.ndjson
+ * @param {object[]} broadcasts  canonical 的 broadcasts.ndjson
  */
-export function project({ marks = [], subjects = [], longform = [] }) {
+export function project({ marks = [], subjects = [], longform = [], broadcasts = [] }) {
   const bySubject = new Map();
   for (const s of subjects) bySubject.set(`${s.medium}:${s.id}`, s);
 
+  const projectedMarks = marks.map((m) => projectMark(m, bySubject.get(`${m.medium}:${m.subject.id}`)));
+
   return {
-    marks: marks.map((m) => projectMark(m, bySubject.get(`${m.medium}:${m.subject.id}`))),
+    marks: projectedMarks,
     longform: longform.map(projectLongform),
+    broadcasts: broadcasts.map((b) => projectBroadcast(b, targetIndex(projectedMarks))),
+  };
+}
+
+/**
+ * 作品 id → 标记，用来把广播接回本地的作品页。
+ *
+ * **id 撞车的一律不接。** 广播上只有 `data-object-id`，没有媒介；而不同媒介的 id
+ * 是各自编号的，理论上会撞。撞了还硬接的话，页面上会出现一条指向另一部作品的链接
+ * ——**那比不接严重得多**：不接只是少个链接，接错了是档案在说假话，而且看不出来。
+ */
+function targetIndex(projectedMarks) {
+  /** @type {Map<string, object|null>} null = 撞车了，不许接 */
+  const out = new Map();
+  for (const m of projectedMarks) {
+    if (out.has(m.subjectId)) out.set(m.subjectId, null);
+    else out.set(m.subjectId, m);
+  }
+  return out;
+}
+
+/**
+ * 一条广播。
+ *
+ * 广播是这套档案里**最不可替代**的东西：发布即冻结、可以被静默删除，所以每条都是
+ * 「那一刻这句话是什么样」的带日期快照。标记页上的短评会被后来的编辑覆盖，广播里
+ * 的不会。
+ */
+function projectBroadcast(b, targets) {
+  const r = b.revisions[b.revisions.length - 1];
+  const f = r.fields;
+  const target = f.target_id ? (targets.get(f.target_id) ?? null) : null;
+
+  return {
+    kind: 'broadcast',
+    id: b.upstream_id,
+    url: b.url ?? null,
+    postedAt: f.posted_at?.iso ?? null,
+    postedAtRaw: f.posted_at?.raw ?? null,
+    text: f.text ?? null,
+    action: f.action ?? null,
+    status: f.status ?? null,
+    targetId: f.target_id ?? null,
+    // 接得回本地作品页的才接。接不回来的（撞车、或者那个作品根本没被标记过）
+    // 保持 null——宁可少一个链接。
+    target: target ? { medium: target.medium, subjectId: target.subjectId, title: target.title } : null,
+    images: f.images ?? [],
+    lastSeenAt: r.last_observed_at,
   };
 }
 

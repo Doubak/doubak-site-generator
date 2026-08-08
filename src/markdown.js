@@ -116,3 +116,83 @@ export function markPath(m) {
 export function longformPath(r) {
   return `${r.kind}/${r.id}.md`;
 }
+
+/**
+ * 广播按月归档，一个月一页。
+ *
+ * ## 为什么不是一条一页
+ *
+ * 3394 条广播里只有 23% 带正文，其余是纯标记动作（「想看 X」）。一条一页会产出
+ * 三千多个只有一行字的文件，把真正有内容的那七百多条埋掉。按月归档保留了广播
+ * 本来的形状——**它是一条时间线，不是一堆条目**。
+ *
+ * 固定链接不丢：每条都有自己的时间戳小标题，SSG 会给它生成锚点，
+ * `/broadcast/2021-11/#2021-11-28-202521` 就是那条广播的地址。
+ *
+ * ## 顺序是倒序的，与豆瓣一致
+ *
+ * 头插列表，新的在上。这不只是习惯问题：抓取本身就是新→旧走的，倒序让页面
+ * 与抓取顺序、与「上面的都抓到了」那个不变量方向一致。
+ *
+ * @param {string} month  `2021-11`
+ * @param {object[]} list 该月的广播，未排序
+ * @param {{images?: Record<string, string>}} [opts] 附图 URL → 本地路径
+ */
+export function broadcastMonthPage(month, list, { images = {} } = {}) {
+  const sorted = [...list].sort((a, b) => (a.postedAt < b.postedAt ? 1 : -1));
+  const [y, m] = month.split('-');
+
+  const fm = {
+    title: `${y}年${Number(m)}月`,
+    // 月首，不是月内某条的时间——这一页代表的是整个月。
+    date: `${month}-01`,
+    douban_kind: 'broadcast_month',
+    douban_month: month,
+    douban_count: sorted.length,
+    // 带正文的有几条。**这个数才是「这一页有多少自己写的东西」**——
+    // 总数里大部分是纯标记动作。
+    douban_with_text: sorted.filter((b) => b.text).length,
+    douban_images: sorted.reduce((n, b) => n + b.images.length, 0),
+  };
+
+  const blocks = sorted.map((b) => {
+    const out = [`### ${b.postedAtRaw ?? b.postedAt ?? '时间未知'}`, ''];
+
+    // 动作那一行：「想看 《某电影》」。接得回本地作品页就接，接不回来就只留文字
+    // ——**不回退到豆瓣的 URL**，那会让一份号称离线可看的档案去联网。
+    if (b.action) {
+      const t = b.target;
+      out.push(t && t.title
+        ? `${b.action} [${t.title}](/${t.medium}/${t.subjectId}/)`
+        : b.action);
+      out.push('');
+    }
+
+    if (b.text) out.push(b.text, '');
+    for (const url of b.images) {
+      // 没导出的图保持原样：留一个指向 doubanio 的 URL，总比悄悄删掉一张图好
+      // ——前者至少说明「这儿本来有图」。
+      out.push(`![](${images[url] ?? url})`, '');
+    }
+    return out.join('\n');
+  });
+
+  return frontMatter(fm) + '\n' + blocks.join('\n');
+}
+
+/** @param {string} month `2021-11` */
+export function broadcastMonthPath(month) {
+  return `broadcast/${month}.md`;
+}
+
+/**
+ * 一条广播属于哪个月。
+ *
+ * 按**本地时间**切，不按 UTC。canonical 里的时间戳带 `+08:00`，用 UTC 切的话
+ * 每月头几个小时的广播会掉到上一个月去——一个不会报错、只会让归档悄悄错位的 bug。
+ *
+ * @param {object} b
+ */
+export function monthOf(b) {
+  return (b.postedAtRaw ?? b.postedAt ?? '').slice(0, 7) || '未知';
+}

@@ -18,7 +18,10 @@ import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 
 import { project, groupMarks } from './projection.js';
-import { markPage, longformPage, markPath, longformPath, verb } from './markdown.js';
+import {
+  markPage, longformPage, markPath, longformPath, verb,
+  broadcastMonthPage, broadcastMonthPath, monthOf,
+} from './markdown.js';
 import { indexImages, exportImages } from './images.js';
 import { frontMatter } from './yaml.js';
 
@@ -29,7 +32,7 @@ const MEDIUM_NAMES = {
 
 /**
  * @param {object} opts
- * @param {{marks: object[], subjects: object[], longform: object[]}} opts.canonical
+ * @param {{marks: object[], subjects: object[], longform: object[], broadcasts: object[]}} opts.canonical
  * @param {string} [opts.bundlesDir] 有它才导出图片
  * @param {string} opts.outDir
  * @param {boolean} [opts.clean] 先清空产出目录，默认 true
@@ -54,6 +57,9 @@ export function generate({ canonical, bundlesDir, outDir, clean = true }) {
         wanted.add(m[0]);
       }
     }
+    // 广播附图。这些是**用户自己上传的**，比封面更不可替代——封面豆瓣还有一份，
+    // 这些没有第二处。
+    for (const b of p.broadcasts) for (const u of b.images) wanted.add(u);
     const res = exportImages({
       index: indexImages(bundlesDir),
       wanted,
@@ -93,6 +99,18 @@ export function generate({ canonical, bundlesDir, outDir, clean = true }) {
   for (const r of p.longform) {
     files.push([join('content', longformPath(r)), longformPage(r, { images: paths })]);
   }
+
+  /** @type {Map<string, object[]>} 月份 → 该月的广播 */
+  const byMonth = new Map();
+  for (const b of p.broadcasts) {
+    const k = monthOf(b);
+    if (!byMonth.has(k)) byMonth.set(k, []);
+    byMonth.get(k).push(b);
+  }
+  for (const [month, list] of byMonth) {
+    files.push([join('content', broadcastMonthPath(month)), broadcastMonthPage(month, list, { images: paths })]);
+  }
+
   files.push(['content/_index.md', homePage(p)]);
 
   for (const [rel, text] of files) {
@@ -105,6 +123,8 @@ export function generate({ canonical, bundlesDir, outDir, clean = true }) {
     pages: files.length,
     marks: p.marks.length,
     longform: p.longform.length,
+    broadcasts: p.broadcasts.length,
+    broadcastMonths: byMonth.size,
     images: imageStats,
   };
 }
@@ -126,6 +146,18 @@ function homePage(p) {
       lines.push(`- ${verb(medium, status)} ${list.length}`);
     }
     lines.push('');
+  }
+
+  const withText = p.broadcasts.filter((b) => b.text).length;
+  if (p.broadcasts.length) {
+    lines.push(
+      '## 广播', '',
+      `- 共 ${p.broadcasts.length} 条，其中 ${withText} 条带正文`,
+      // **广播发布即冻结。** 这不是一句介绍，是这份档案里唯一能证明
+      // 「首次抓取之前发生过编辑」的东西——标记页上的短评会被后来的编辑覆盖。
+      '- 广播发布后不可编辑，所以每条都是那一刻的原话',
+      '',
+    );
   }
 
   const notes = p.longform.filter((r) => r.kind === 'note').length;
