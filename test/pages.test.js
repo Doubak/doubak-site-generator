@@ -141,6 +141,20 @@ describe('页面', () => {
     assert.match(markPage(p), /^douban_cover: null$/m);
   });
 
+  test('**又名要写进 front matter** —— 页面上得看得见', () => {
+    // 从「重返沉默之丘」搜进来的人看到的标题是《重返寂静岭》，
+    // 页面上不写又名的话，他会以为搜错了。
+    const s = subject({ revisions: [{
+      parser_version: 'p/1', first_observed_at: 'x', last_observed_at: 'x',
+      fields: { title: '重返寂静岭', cover_url: null, raw_meta: null,
+        aliases: ['重返沉默之丘(台)', '寂静岭2真人版'] },
+      digests: {}, observations: [],
+    }] });
+    const [p] = project({ marks: [mark()], subjects: [s] }).marks;
+    assert.deepEqual(p.aliases, ['重返沉默之丘(台)', '寂静岭2真人版']);
+    assert.match(markPage(p), /douban_aliases:/);
+  });
+
   test('文件名用 id 不用标题', () => {
     // 标题会变、可能是 null、还可能撞名。id 稳定，固定链接才不会在重新生成之后变。
     const [p] = project({ marks: [mark()], subjects: [subject()] }).marks;

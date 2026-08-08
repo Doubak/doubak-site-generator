@@ -23,6 +23,16 @@
     <blockquote>豆瓣上这个条目已经不存在了。下面这些是你自己写的，它们没有跟着消失。</blockquote>
   {{ end }}
 
+  {{ with .Params.douban_aliases }}
+    {{/*
+      又名要显示出来。它不只是给搜索用的——从「重返沉默之丘」搜进来的人
+      看到的标题是《重返寂静岭》，页面上不写又名的话，他会以为搜错了。
+
+      无语言标注，原样按豆瓣给的顺序列（排第一的通常是最通行的那个译名）。
+    */}}
+    <p class="dim">又名：{{ delimit . " / " }}</p>
+  {{ end }}
+
   {{ with .Params.douban_cover }}<p><img src="{{ . }}" alt="" style="max-width:14rem"></p>{{ end }}
 
   {{ with .Params.douban_meta }}
