@@ -1,0 +1,65 @@
+{{ define "main" }}
+
+{{ $isMedia := in (slice "movie" "book" "music" "game" "drama") .Section }}
+{{/* Hugo 会把 [params] 里的键全部转成小写，所以这里写 mediumnames 而不是 mediumNames。 */}}
+{{ $names := .Site.Params.mediumnames }}
+
+<h1>{{ index $names .Section | default .Title }}</h1>
+
+{{ .Content }}
+
+{{ if $isMedia }}
+  {{/*
+    按状态分组：想看 / 在看 / 看过 是三件不同的事，混在一起按时间排看不出名堂。
+
+    组名直接取页面里的 douban_verb —— 动词跟着媒介走（「看过一本书」是错的说法），
+    而那个判断生成器里已经做过了，这里不重做。
+
+    这里**不分页**，让一个 section 一次铺完。影视有 2102 条，看起来像是应该分页，
+    但按状态分组之后再分页会把组切碎（Hugo 的分页器作用在整个 .Pages 上）。
+    图片都带 loading="lazy"，实际只加载看得见的那些。
+  */}}
+  {{ range .Pages.GroupByParam "douban_status" }}
+    {{ $verb := "" }}
+    {{ range first 1 .Pages }}{{ $verb = .Params.douban_verb }}{{ end }}
+    <h2>{{ $verb | default .Key }} <span class="dim">{{ len .Pages }}</span></h2>
+    <ul class="grid">
+      {{ range .Pages }}
+        <li>
+          <a href="{{ .RelPermalink }}">
+            {{ with .Params.douban_cover }}
+              <img src="{{ . }}" alt="" loading="lazy">
+            {{ else }}
+              {{/* 上游被删的作品就是没有封面。豆瓣的占位图不是内容，生成器已经把它去掉了。 */}}
+              <div class="nocover">无封面</div>
+            {{ end }}
+            <div class="t">{{ .Title }}</div>
+            {{ with .Params.douban_rating }}<div class="m">{{ . }} 星</div>{{ end }}
+          </a>
+        </li>
+      {{ end }}
+    </ul>
+  {{ end }}
+
+{{ else }}
+  {{/* 日记、评论、广播：一条一行，倒序。广播那些页本身就是「某年某月」，这层只是目录。 */}}
+  {{ $paginator := .Paginate .Pages.ByDate.Reverse }}
+  <ul>
+    {{ range $paginator.Pages }}
+      <li>
+        <a href="{{ .RelPermalink }}">{{ .Title }}</a>
+        {{ with .Params.douban_count }}<span class="dim">{{ . }} 条</span>{{ end }}
+        {{ with .Params.douban_with_text }}<span class="dim">带正文 {{ . }}</span>{{ end }}
+      </li>
+    {{ end }}
+  </ul>
+  {{ if or $paginator.HasPrev $paginator.HasNext }}
+    <div class="pager">
+      {{ if $paginator.HasPrev }}<a href="{{ $paginator.Prev.URL }}">← 上一页</a>{{ end }}
+      <span class="dim">{{ $paginator.PageNumber }} / {{ $paginator.TotalPages }}</span>
+      {{ if $paginator.HasNext }}<a href="{{ $paginator.Next.URL }}">下一页 →</a>{{ end }}
+    </div>
+  {{ end }}
+{{ end }}
+
+{{ end }}

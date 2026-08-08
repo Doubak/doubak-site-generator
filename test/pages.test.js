@@ -7,6 +7,12 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { generate } from '../src/generate.js';
 
 import { project, groupMarks } from '../src/projection.js';
 import {
@@ -274,5 +280,69 @@ describe('广播', () => {
       images: { 'https://img1.doubanio.com/x/p1.jpg': '/uploads/p1.jpg' },
     });
     assert.match(text, /!\[\]\(\/uploads\/p1\.jpg\)/);
+  });
+});
+
+describe('Hugo 骨架', () => {
+  const THEME = join(dirname(fileURLToPath(import.meta.url)), '..', 'theme', 'hugo');
+
+  test('骨架本身是完整的', () => {
+    // 少一个 baseof.html，Hugo 不会报错，它会**渲染出没有 <html> 的碎片**——
+    // 页面能打开、内容也在，只是没有样式没有导航。那种失败最难发现。
+    for (const f of ['hugo.toml', 'layouts/index.html',
+      'layouts/_default/baseof.html', 'layouts/_default/list.html',
+      'layouts/_default/single.html']) {
+      assert.ok(existsSync(join(THEME, f)), `骨架缺 ${f}`);
+    }
+  });
+
+  test('**骨架里不许有 content/**', () => {
+    // 有的话会盖掉刚生成的那 3098 个页面，而产出目录看起来完全正常。
+    assert.ok(!existsSync(join(THEME, 'content')), '骨架不该带 content/');
+  });
+
+  test('拷进产出目录，且不碰 content/', () => {
+    const out = mkdtempSync(join(tmpdir(), 'doubak-theme-'));
+    const canonical = { marks: [], subjects: [], longform: [], broadcasts: [] };
+    const r = generate({ canonical, outDir: out, themeDir: THEME });
+    assert.ok(existsSync(join(out, 'hugo.toml')));
+    assert.ok(existsSync(join(out, 'layouts/_default/baseof.html')));
+    assert.ok(existsSync(join(out, 'content/_index.md')), '首页应当还在');
+    assert.equal(r.theme, THEME);
+  });
+
+  test('不给 themeDir 就只出 content/static', () => {
+    const out = mkdtempSync(join(tmpdir(), 'doubak-notheme-'));
+    const r = generate({ canonical: { marks: [], subjects: [], longform: [], broadcasts: [] }, outDir: out });
+    assert.ok(!existsSync(join(out, 'hugo.toml')));
+    assert.equal(r.theme, null);
+  });
+
+  test('**模板里引用的 front matter 键，生成器真的会写**', () => {
+    // 这两边是靠字符串对上的，拼错一个字不会报错——Hugo 对不存在的 .Params.x
+    // 返回空值，页面照样渲染，只是那一块永远是空的。
+    const used = new Set();
+    for (const f of readdirSync(join(THEME, 'layouts'), { recursive: true })) {
+      const p = join(THEME, 'layouts', String(f));
+      if (!String(f).endsWith('.html')) continue;
+      for (const m of readFileSync(p, 'utf-8').matchAll(/\.Params\.(douban_\w+)/g)) used.add(m[1]);
+    }
+    assert.ok(used.size > 5, '没从模板里扫到几个键，扫描本身可能坏了');
+
+    const [pm] = project({ marks: [mark()], subjects: [subject()] }).marks;
+    const emitted = new Set([
+      ...markPage(pm).matchAll(/^(douban_\w+):/gm),
+      ...broadcastMonthPage('2021-11', [{
+        postedAtRaw: '2021-11-02 10:00:00', text: 'x', images: [], action: null, target: null,
+      }]).matchAll(/^(douban_\w+):/gm),
+      // 字段要给全（哪怕是 null）。`undefined` 是**故意**不写出来的，
+      // 所以一个偷懒的 fixture 会让这条测试去告生成器的状。
+      ...longformPage({ kind: 'note', id: '1', url: null, title: 't', body: 'b',
+        publishedAt: null, publishedAtRaw: null, location: null, rating: null,
+        subjectUrl: null, revisionCount: 1, lastSeenAt: 'x' }).matchAll(/^(douban_\w+):/gm),
+    ].map((m) => m[1]));
+
+    const missing = [...used].filter((k) => !emitted.has(k));
+    assert.deepEqual(missing, [], `模板引用了生成器不写的键：${missing.join(' ')}`);
   });
 });

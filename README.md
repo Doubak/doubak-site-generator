@@ -3,7 +3,7 @@
 豆备 (Doubak) 的静态网页生成器。把 [canonical](https://github.com/Doubak/doubak-data-specs) 数据转成 **Markdown + YAML front matter**，交给现成的静态站生成器渲染 —— 就像浏览自己开的豆瓣一样。
 
 ```sh
-node bin/generate.js <canonical 目录> <bundle 目录> [产出目录]
+node bin/generate.js <canonical 目录> <bundle 目录> [产出目录] [--no-theme]
 npm test    # node --test，零依赖，不需要 npm install
 ```
 
@@ -32,34 +32,67 @@ node bin/generate.js ~/downloads/20260806-canonical ~/downloads/20260806 ~/downl
 │   ├── movie/ book/ music/ game/ drama/   一个作品一页，文件名是作品 id
 │   ├── note/ review/      日记与评论全文
 │   └── broadcast/         按月归档，2014-01.md … 2026-08.md
-└── static/
-    ├── covers/            作品封面
-    └── uploads/           自己上传的图（广播附图、日记内嵌图）
+├── static/
+│   ├── covers/            作品封面
+│   └── uploads/           自己上传的图（广播附图、日记内嵌图）
+├── hugo.toml              ↓ 这两个是自带的最小 Hugo 骨架，--no-theme 可以不要
+└── layouts/
 ```
 
-## 交给静态站生成器
+## 直接就能看：自带一个最小 Hugo 骨架
 
-`content/` + `static/` 这个布局就是 **Hugo** 的布局，所以 Hugo 最省事：
+生成器**默认**会把 `theme/hugo/` 一并拷进产出目录，所以产出的就是一个能直接跑的 Hugo 站点：
 
 ```sh
-hugo new site mysite && cd mysite
-git clone --depth 1 https://github.com/<某个主题> themes/x
-echo 'theme = "x"' >> hugo.toml
-
-cp -r ~/downloads/20260806-site/content/* content/
-cp -r ~/downloads/20260806-site/static/*  static/
-hugo server
+node bin/generate.js ~/downloads/20260806-canonical ~/downloads/20260806 ~/downloads/20260806-site
+cd ~/downloads/20260806-site && hugo server
 ```
 
-Astro / Eleventy / Jekyll 同理，只是目录名不同（Astro 是 `src/content/` 与 `public/`，Jekyll 是 `_posts/` 与站点根）。front matter 里除了 `title` / `date` / `tags` 全部带 `douban_` 前缀，就是为了不撞上主题自己的约定 —— 主题认不认得它们不影响构建，只是不显示。
+```
+20260806-site/
+├── hugo.toml        ← 骨架
+├── layouts/         ← 骨架
+├── content/         ← 生成的
+└── static/          ← 生成的
+```
 
-**注意：还没有对着任何一个 SSG 真的跑过。** 3098 个文件里只要有一处 front matter 不合它的口味，整站构建就会失败。目前只有间接证据，两条：`test/yaml.test.js` 拿冒号、引号、井号、颜文字、看起来像布尔值的 `no`、看起来像数字的 `007` 做往返验证；生成那 3098 个文件之后，又用一个独立写的读取器把每一份 front matter 都读了回来，无一读不动。**这两条都不等于「Hugo 能构建」** —— 真跑通之前，别把它当成能用。
+选 Hugo 是因为它是**单个二进制**，没有依赖树 —— 这份东西的整个论点是可审计与长命，而一个要装几百个 npm 包才能重建的存档站是自相矛盾的。另外 `content/` + `static/` 这个布局本来就是 Hugo 的，少一层适配。
 
-## 不做模板引擎
+骨架**不发任何外部请求**：样式内联、字体用系统栈、没有统计脚本、没有评论服务。这份备份存在的理由是不再需要豆瓣还活着才能看，那它自己也不该需要某个 CDN 还活着才好看。
 
-产出 Markdown，交给 Hugo / Astro / Eleventy / Jekyll —— **每一个现成的主题生态都变成模板库**。自己写一个模板引擎意味着要重新发明布局、分页、RSS、搜索，而那些早就有人做得更好。
+### 骨架是起点，不是产品
 
-代价是 front matter 的字段名要在几个 SSG 之间取公约数。取法：用它们都认的那几个（`title` / `date` / `tags`），其余一律加 `douban_` 前缀，免得撞上主题自己的约定。
+它刻意只有五个文件，**就是为了让你删掉它**：
+
+```sh
+node bin/generate.js <canonical> <bundles> <out> --no-theme    # 只出 content/ 与 static/
+```
+
+换成任何一个现成的 Hugo 主题：删掉 `layouts/`，照那个主题的说明配置，**`content/` 与 `static/` 一个字都不用动**。换成 Astro / Eleventy / Jekyll 也一样，只是目录名不同（Astro 是 `src/content/` 与 `public/`，Jekyll 是 `_posts/` 与站点根）。
+
+这正是「不做模板引擎」那条的兑现方式 —— 产出的是 Markdown + YAML front matter 这种**所有 SSG 都吃的东西**，于是每一个现成的主题生态都变成模板库。自己写一个模板引擎意味着要重新发明布局、分页、RSS、搜索，而那些早就有人做得更好。
+
+front matter 里除了 `title` / `date` / `tags` 全部带 `douban_` 前缀，就是为了不撞上主题自己的约定。主题认不认得它们不影响构建，只是不显示：
+
+| 键 | 出现在 |
+|---|---|
+| `douban_kind` | 全部。取值 `mark` / `note` / `review` / `broadcast_month` / `index` |
+| `douban_medium` `douban_status` `douban_verb` `douban_rating` `douban_cover` `douban_meta` `douban_upstream_deleted` | 标记 |
+| `douban_published_at_raw` `douban_location` `douban_subject_url` | 日记与评论 |
+| `douban_month` `douban_count` `douban_with_text` `douban_images` | 广播月页 |
+| `douban_revisions` `douban_last_seen` `douban_url` | 全部 —— 通往 canonical 的线索 |
+
+`test/pages.test.js` 里有一条测试专门守着这张表：**骨架模板引用的每个 `douban_*` 键，生成器都真的会写。** 这两边是靠字符串对上的，拼错一个字不会报错 —— Hugo 对不存在的 `.Params.x` 返回空值，页面照样渲染，只是那一块永远是空的。
+
+### 还没验证过的那一环
+
+**没有对着 Hugo 真的构建过。** 3098 个文件里只要有一处 front matter 不合它的口味，整站构建就会失败。目前的证据都是间接的：
+
+- `test/yaml.test.js` 拿冒号、引号、井号、颜文字、看起来像布尔值的 `no`、看起来像数字的 `007` 做往返验证
+- 生成那 3098 个文件之后，用一个独立写的读取器把每一份 front matter 都读了回来，无一读不动
+- 骨架模板引用的键与生成器写的键对得上（上面那条测试）
+
+**这三条都不等于「Hugo 能构建」。** 最可疑的是 8 个 `date: null` 的页面（上游被删、没有标记时间的那几条）—— 真去验的话，先看它们。
 
 ## 两个输入，一个都不能少
 

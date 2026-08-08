@@ -1,0 +1,37 @@
+# 一个能直接跑起来的最小 Hugo 站点配置。
+#
+# 这**不是** Hugo 意义上的 theme（那种要放在 themes/<名字>/ 下、还要在配置里点名）。
+# 这里就是站点本身：layouts/ 直接放在站点根下，Hugo 优先用它。少一层间接，
+# 也少一件要解释的事。
+#
+# 换成任何一个现成的 Hugo 主题，只要删掉 layouts/ 再照那个主题的说明配置就行——
+# content/ 与 static/ 一个字都不用动。**那才是「交给现成的 SSG」的意思。**
+
+baseURL = '/'
+languageCode = 'zh-cn'
+title = '我的豆瓣存档'
+
+# 站点是纯静态的，也**不该**有任何外部请求。这份备份存在的理由就是不再依赖豆瓣，
+# 那么它自己也不该去依赖字体 CDN、统计脚本、评论服务。
+disableKinds = ['rss', 'sitemap']
+
+[pagination]
+  # 影视有 2102 条。一页全铺出来就是两千多张图，谁也打不开。
+  pagerSize = 48
+
+[markup.goldmark.renderer]
+  # 正文是**用户自己写的字**，原样渲染。豆瓣的短评里有尖括号、颜文字、
+  # 半个 HTML 标签都不奇怪，转义掉才是对的。
+  unsafe = false
+
+[params]
+  # 媒介的中文名。豆瓣的动词跟着媒介走，「看过一本书」是错的说法。
+  [params.mediumNames]
+    movie = '影视'
+    book = '书'
+    music = '音乐'
+    game = '游戏'
+    drama = '舞台剧'
+    note = '日记'
+    review = '评论'
+    broadcast = '广播'

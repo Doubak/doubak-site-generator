@@ -14,7 +14,7 @@
  * 内容看着也正常，只是早就不在数据里了。
  */
 
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, cpSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 
 import { project, groupMarks } from './projection.js';
@@ -36,8 +36,9 @@ const MEDIUM_NAMES = {
  * @param {string} [opts.bundlesDir] 有它才导出图片
  * @param {string} opts.outDir
  * @param {boolean} [opts.clean] 先清空产出目录，默认 true
+ * @param {string|null} [opts.themeDir] 一并拷进去的 Hugo 站点骨架；null = 只出 content/static
  */
-export function generate({ canonical, bundlesDir, outDir, clean = true }) {
+export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir = null }) {
   const p = project(canonical);
 
   if (clean) rmSync(outDir, { recursive: true, force: true });
@@ -113,6 +114,16 @@ export function generate({ canonical, bundlesDir, outDir, clean = true }) {
 
   files.push(['content/_index.md', homePage(p)]);
 
+  // ── 可选：把那个最小 Hugo 骨架一并拷进去，让产出目录直接 `hugo server` 就能跑
+  //
+  // **先拷骨架，后写 content**——反过来的话，骨架里万一带了 content/ 会盖掉刚生成的。
+  // 现在骨架里没有 content/，但这个顺序不该依赖「现在恰好没有」。
+  let theme = null;
+  if (themeDir && existsSync(themeDir)) {
+    cpSync(themeDir, outDir, { recursive: true });
+    theme = themeDir;
+  }
+
   for (const [rel, text] of files) {
     const abs = join(outDir, rel);
     mkdirSync(dirname(abs), { recursive: true });
@@ -125,6 +136,7 @@ export function generate({ canonical, bundlesDir, outDir, clean = true }) {
     longform: p.longform.length,
     broadcasts: p.broadcasts.length,
     broadcastMonths: byMonth.size,
+    theme,
     images: imageStats,
   };
 }

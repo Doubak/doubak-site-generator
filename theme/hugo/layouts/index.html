@@ -1,0 +1,26 @@
+{{ define "main" }}
+{{ $names := .Site.Params.mediumnames }}
+
+<h1>{{ .Title }}</h1>
+
+{{/*
+  首页的正文是生成器写的：各媒介各状态的条数。
+
+  **只给数字，不给百分比，也不写「完整」。** 完整性的证据在 bundle 的 crawl_state
+  里，而豆瓣的计数有时算在它的审查层之前、有时之后（实测同一次抓取：电影声称
+  1157 渲染 1157，游戏声称 293 只渲染 288，缺口还在列表中间）。投影这一层没有
+  资格复述一个可能过期、甚至从来就不成立的结论。
+*/}}
+{{ .Content }}
+
+<h2>浏览</h2>
+<ul>
+  {{ range .Site.Sections.ByTitle }}
+    <li>
+      <a href="{{ .RelPermalink }}">{{ index $names .Section | default .Title }}</a>
+      <span class="dim">{{ len .Pages }}</span>
+    </li>
+  {{ end }}
+</ul>
+
+{{ end }}
