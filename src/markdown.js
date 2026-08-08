@@ -186,6 +186,14 @@ export function broadcastMonthPage(month, list, { images = {} } = {}) {
     }
 
     if (b.text) out.push(plainText(b.text), '');
+    // **被截断就说出来。** 显示半截正文而不声明，站点就在替档案说假话。
+    // 接得回本地长文页就给个链接（同样用 .md 相对路径，不硬编码 URL 方案）；
+    // 接不上就只说被截断了——不回退到豆瓣。
+    if (b.textTruncated) {
+      out.push(b.fullText
+        ? `*（豆瓣在这里截断了，[全文在这篇${b.fullText.kind === 'review' ? '评论' : '日记'}里](../${b.fullText.kind}/${b.fullText.id}.md)）*`
+        : '*（豆瓣在这里截断了，全文不在档案里）*', '');
+    }
     for (const url of b.images) {
       // 没导出的图保持原样：留一个指向 doubanio 的 URL，总比悄悄删掉一张图好
       // ——前者至少说明「这儿本来有图」。

@@ -78,8 +78,29 @@ function projectBroadcast(b, targets) {
     // 保持 null——宁可少一个链接。
     target: target ? { medium: target.medium, subjectId: target.subjectId, title: target.title } : null,
     images: f.images ?? [],
+    // 正文被豆瓣截断了，`text` 只是开头。**页面上必须说出来**——
+    // 显示半截正文而不声明，站点就在替档案说假话。
+    textTruncated: Boolean(f.text_truncated),
+    // 全文在哪。实测它指向的是一篇日记，而日记的全文本来就在档案里，
+    // 所以这里把它接回**本地**的那一页，而不是回退到豆瓣。
+    fullText: f.full_text_url ? localLongform(f.full_text_url) : null,
     lastSeenAt: r.last_observed_at,
   };
+}
+
+/**
+ * 把「全文」的豆瓣 URL 换成本地长文页的相对路径。
+ *
+ * 接不上就返回 null，**不回退到豆瓣的 URL**——那会让一份号称离线可看的档案
+ * 为了一段正文去联网。接不上时页面只说「被截断了」，那是实话。
+ *
+ * @param {string} url
+ */
+function localLongform(url) {
+  const m = /\/(note|topic|review)\/(\d+)/.exec(url);
+  if (!m) return null;
+  // /topic/ 与 /note/ 是同一种东西的两种 URL 形状，都落在 note/ 目录下。
+  return { kind: m[1] === 'review' ? 'review' : 'note', id: m[2] };
 }
 
 /** 最后一条修订。**不是**「最新的上游状态」，是「我们最后一次看到的样子」。 */

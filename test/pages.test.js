@@ -276,6 +276,35 @@ describe('广播', () => {
     assert.equal(p.broadcasts[0].target, null, 'id 撞车时不该接');
   });
 
+  test('**被截断的广播必须在页面上说出来**', () => {
+    // 显示半截正文而不声明，站点就在替档案说假话。
+    const p = project({ broadcasts: [bc({
+      text: '开头一段', text_truncated: true,
+      full_text_url: 'https://www.douban.com/note/872015292/',
+    })] });
+    assert.equal(p.broadcasts[0].textTruncated, true);
+    const text = broadcastMonthPage('2021-11', p.broadcasts);
+    assert.match(text, /豆瓣在这里截断了/);
+    // 全文接回**本地**那一页，不是豆瓣。
+    assert.match(text, /\.\.\/note\/872015292\.md/);
+    assert.ok(!/douban\.com/.test(text), '不该回退到豆瓣的 URL');
+  });
+
+  test('接不回本地长文时只说被截断，仍然不给豆瓣链接', () => {
+    const p = project({ broadcasts: [bc({
+      text: '开头', text_truncated: true, full_text_url: 'https://www.douban.com/something/else/',
+    })] });
+    assert.equal(p.broadcasts[0].fullText, null);
+    const text = broadcastMonthPage('2021-11', p.broadcasts);
+    assert.match(text, /全文不在档案里/);
+    assert.ok(!/douban\.com/.test(text));
+  });
+
+  test('没被截断的广播不该冒出这句话', () => {
+    const p = project({ broadcasts: [bc({ text: '完整的一条' })] });
+    assert.ok(!/截断/.test(broadcastMonthPage('2021-11', p.broadcasts)));
+  });
+
   test('附图换成本地路径', () => {
     const p = project({ broadcasts: [bc({ images: ['https://img1.doubanio.com/x/p1.jpg'] })] });
     assert.deepEqual(p.broadcasts[0].images, ['https://img1.doubanio.com/x/p1.jpg']);
