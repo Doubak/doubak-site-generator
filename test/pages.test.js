@@ -534,11 +534,28 @@ describe('Hugo 骨架', () => {
       outDir: out,
     });
     assert.equal(r.theme, null);
-    assert.deepEqual(readdirSync(out).sort(), ['content']);
+    // 搜索索引也在里面——它是从 canonical 派生的**数据**，任何 SSG 都能用，
+    // 所以不带骨架时照样产出。
+    assert.deepEqual(readdirSync(out).sort(), ['content', 'static']);
     const all = readdirSync(out, { recursive: true }).map(String);
     for (const f of all) {
       assert.ok(!/hugo|layouts|\.html$/i.test(f), `产出里混进了 Hugo 专属的 ${f}`);
     }
+    assert.ok(all.includes(join('static', 'search-index.js')), '索引该在 static/ 里');
+  });
+
+  test('**索引是 .js 不是 .json** —— file:// 下 fetch 会被拦', () => {
+    // 用 .json + fetch 的话，站点在 http 下能搜、双击打开就废。而「双击
+    // index.html 就能看」是这个项目已经守住的性质，不该为搜索破掉。
+    const out = mkdtempSync(join(tmpdir(), 'doubak-search-'));
+    generate({ canonical: { marks: [mark()], subjects: [subject()], longform: [], broadcasts: [] }, outDir: out });
+    const js = readFileSync(join(out, 'static/search-index.js'), 'utf-8');
+    assert.match(js, /^window\.DOUBAK_SEARCH=/m, '要挂成全局变量，script 标签才用得上');
+    assert.ok(!existsSync(join(out, 'static/search-index.json')));
+    // 内容得能被 JSON 解出来（去掉赋值和注释）。
+    const rows = JSON.parse(js.slice(js.indexOf('=') + 1, js.lastIndexOf(';')));
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].u, 'movie/36838707', '路径不带扩展名——那是 SSG 的决定，不是索引的');
   });
 
   test('front matter 里除了三个通用键，全部带 douban_ 前缀', () => {

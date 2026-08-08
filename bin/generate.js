@@ -48,6 +48,8 @@ console.log(
 
 // **缺图要说出来。** 静默忽略的话，站点上会缺一张图而没人知道为什么——
 // 而原因（那次抓取被拦下了／那条路线还没做）恰恰是用户该知道的。
+console.log(`   搜索索引 ${r.searchRows} 条（${Math.round(r.searchBytes / 1024)} KB，gzip 后 ${Math.round(r.searchGzip / 1024)} KB）`);
+
 if (r.theme) {
   console.log(`\n带上了那个最小 Hugo 骨架。装了 hugo 的话现在就能看：`);
   console.log(`   cd ${outDir} && hugo server`);

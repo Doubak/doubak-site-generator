@@ -15,6 +15,7 @@
  */
 
 import { mkdirSync, writeFileSync, rmSync, cpSync, existsSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { join, dirname } from 'node:path';
 
 import { project, groupMarks } from './projection.js';
@@ -23,6 +24,7 @@ import {
   broadcastMonthPage, broadcastMonthPath, monthOf,
 } from './markdown.js';
 import { indexImages, exportImages } from './images.js';
+import { buildSearchIndex } from './search.js';
 import { frontMatter } from './yaml.js';
 
 /** 媒介的中文名。**唯一的一份**，与扩展那边同源。 */
@@ -114,6 +116,15 @@ export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir
 
   files.push(['content/_index.md', homePage(p)]);
 
+  // ── 搜索索引
+  //
+  // **总是产出，即使不带骨架。** 它是从 canonical 派生的数据，任何 SSG 都能用；
+  // 搜索框与结果页才是骨架的事。
+  const search = buildSearchIndex(p);
+  files.push(['static/search-index.js', search.js]);
+  // 搜索页本身要有个 content 文件，Hugo 才会渲染它。
+  files.push(['content/search.md', searchPage(search.rows.length)]);
+
   // ── 可选：把那个最小 Hugo 骨架一并拷进去，让产出目录直接 `hugo server` 就能跑
   //
   // **先拷骨架，后写 content**——反过来的话，骨架里万一带了 content/ 会盖掉刚生成的。
@@ -136,6 +147,14 @@ export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir
     longform: p.longform.length,
     broadcasts: p.broadcasts.length,
     broadcastMonths: byMonth.size,
+    searchRows: search.rows.length,
+    // **按字节算，不按 .length 算。** JS 的字符串长度是 UTF-16 码元数，
+    // 一个汉字算 1，而它在 UTF-8 里是 3 个字节——索引里绝大部分是中文，
+    // 用 .length 报出来会少算三分之二。
+    searchBytes: Buffer.byteLength(search.js, 'utf-8'),
+    // 真去压一遍，不去猜一个比例。传输量是用户唯一在意的数，
+    // 而 484 KB 猜成 179 KB 与实际的 266 KB 差着 50%。
+    searchGzip: gzipSync(Buffer.from(search.js, 'utf-8')).length,
     theme,
     images: imageStats,
   };
@@ -190,4 +209,19 @@ function homePage(p) {
   }
 
   return frontMatter({ title: '我的豆瓣存档', douban_kind: 'index' }) + '\n' + lines.join('\n');
+}
+
+/**
+ * 搜索页。正文是空的——结果由骨架里的脚本填。
+ *
+ * `layout: search` 让 Hugo 去找 `layouts/_default/search.html`。别的 SSG 认不认
+ * 这个键无所谓：认不出来它就是一个空页面，而索引文件仍然在那儿可以自己用。
+ */
+function searchPage(n) {
+  return frontMatter({
+    title: '搜索',
+    layout: 'search',
+    douban_kind: 'search',
+    douban_count: n,
+  });
 }

@@ -82,6 +82,7 @@ footer.site .wrap { padding: 1.2rem; font-size: .85rem; color: var(--dim); }
     {{ range .Site.Sections.ByTitle }}
       <a href="{{ .RelPermalink }}">{{ index $.Site.Params.mediumnames .Section | default .Title }}</a>
     {{ end }}
+    {{ with .Site.GetPage "/search" }}<a href="{{ .RelPermalink }}">搜索</a>{{ end }}
   </nav>
 </div></header>
 

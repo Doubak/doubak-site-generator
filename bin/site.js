@@ -58,6 +58,8 @@ console.log(
   `① 生成 ${r.pages} 页（标记 ${r.marks} · 长文 ${r.longform} · 广播 ${r.broadcasts} 条归入 ${r.broadcastMonths} 个月）`
   + ` · 图片 ${r.images.written} 张 · ${Date.now() - t0} ms`,
 );
+console.log(`   搜索索引 ${r.searchRows} 条（${Math.round(r.searchBytes / 1024)} KB，gzip 后 ${Math.round(r.searchGzip / 1024)} KB）`);
+
 if (r.images.missing.length) {
   console.log(`   档案里没有的图 ${r.images.missing.length} 张（页面上会缺）`);
 }
