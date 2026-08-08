@@ -3,10 +3,13 @@
 豆备 (Doubak) 的静态网页生成器。把 [canonical](https://github.com/Doubak/doubak-data-specs) 数据转成 **Markdown + YAML front matter**，交给现成的静态站生成器渲染 —— 就像浏览自己开的豆瓣一样。
 
 ```sh
-npm run site  -- <canonical 目录> <bundle 目录> [产出目录]   # 生成 + 构建成 HTML
-npm run serve -- <canonical 目录> <bundle 目录> [产出目录]   # 生成 + 起预览
+npm run md    -- <canonical 目录> <bundle 目录> [产出目录]   # 只出 Markdown + 图片
+npm run site  -- <canonical 目录> <bundle 目录> [产出目录]   # 再构建成 HTML
+npm run serve -- <canonical 目录> <bundle 目录> [产出目录]   # 再起个预览
 npm test                                                    # node --test，零依赖
 ```
+
+**`md` 才是这个工具的产物，`site` 只是它的一个消费者。** 想用别的静态站生成器就用 `md`，产出里不会有任何 Hugo 专属的东西。
 
 需要 Node ≥ 20。**不用 `npm install`** —— 依赖是空的，见下。
 
@@ -26,7 +29,7 @@ npm run site -- ~/downloads/20260806-canonical ~/downloads/20260806 ~/downloads/
 
 第二步为什么还要 bundle：canonical 是纯文本（用 `jq` 就能查，不装二进制），**图片的字节在 bundle 里**。两个输入一个都不能少。
 
-只要 Markdown、不要 HTML 的话用 `npm run generate`（参数一样，多一个 `--no-theme` 可以连骨架也不要）。
+**只要 Markdown、不要 HTML 就用 `npm run md`**（参数完全一样）。产出里不会有任何 Hugo 专属的文件，可以直接喂给 Astro / Eleventy / Jekyll —— 见下面「用别的静态站生成器」。
 
 产出：
 
@@ -79,17 +82,21 @@ npm 上那些 `hugo-bin` 之类的包做的恰好就是这件事——下载官�
 
 ### 骨架是起点，不是产品
 
-它刻意只有五个文件，**就是为了让你删掉它**：
+它刻意只有五个文件，**就是为了让你删掉它**。换成任何一个现成的 Hugo 主题：删掉 `layouts/`，照那个主题的说明配置，`content/` 与 `static/` 一个字都不用动。
+
+## 用别的静态站生成器
 
 ```sh
-npm run generate -- <canonical> <bundles> <out> --no-theme    # 只出 content/ 与 static/
+npm run md -- <canonical> <bundles> <out>
 ```
 
-换成任何一个现成的 Hugo 主题：删掉 `layouts/`，照那个主题的说明配置，**`content/` 与 `static/` 一个字都不用动**。换成 Astro / Eleventy / Jekyll 也一样，只是目录名不同（Astro 是 `src/content/` 与 `public/`，Jekyll 是 `_posts/` 与站点根）。
+产出只有 `content/`（3098 个 `.md`）与 `static/`（3045 张图），**没有一个 Hugo 专属的文件**（有测试守着这条 —— 混进去一个 `hugo.toml`，别的 SSG 多半会把它当成待渲染的内容）。
 
-这正是「不做模板引擎」那条的兑现方式 —— 产出的是 Markdown + YAML front matter 这种**所有 SSG 都吃的东西**，于是每一个现成的主题生态都变成模板库。自己写一个模板引擎意味着要重新发明布局、分页、RSS、搜索，而那些早就有人做得更好。
+这正是「不做模板引擎」那条的兑现方式：产出 Markdown + YAML front matter 这种**所有 SSG 都吃的东西**，于是每一个现成的主题生态都变成模板库。自己写模板引擎意味着要重新发明布局、分页、RSS、搜索，而那些早就有人做得更好。
 
-front matter 里除了 `title` / `date` / `tags` 全部带 `douban_` 前缀，就是为了不撞上主题自己的约定。主题认不认得它们不影响构建，只是不显示：
+### front matter 的约定
+
+除了 `title` / `date` / `tags` 这三个各家都认的，其余一律带 `douban_` 前缀，免得撞上主题自己的约定（撞上了不会报错 —— 主题会拿我们的值去做它自己的事，页面看着正常而内容是错的）。有测试守着这条。
 
 | 键 | 出现在 |
 |---|---|
@@ -99,9 +106,15 @@ front matter 里除了 `title` / `date` / `tags` 全部带 `douban_` 前缀，�
 | `douban_month` `douban_count` `douban_with_text` `douban_images` | 广播月页 |
 | `douban_revisions` `douban_last_seen` `douban_url` | 全部 —— 通往 canonical 的线索 |
 
-`test/pages.test.js` 里有一条测试专门守着这张表：**骨架模板引用的每个 `douban_*` 键，生成器都真的会写。** 这两边是靠字符串对上的，拼错一个字不会报错 —— Hugo 对不存在的 `.Params.x` 返回空值，页面照样渲染，只是那一块永远是空的。
+### 换 SSG 时会硌到的三处
 
-### 验过了：Hugo 0.164 构建通过
+**只对着 Hugo 验证过。** 下面这几条是从产出的实际形态推的，不是跑出来的 —— 遇到问题先看它们：
+
+- **`date: null`**（8 个文件）。豆瓣没记标记时间的那几条老标记。Jekyll 与 Eleventy 容得下，**Astro 的 content collections 会卡住**：schema 里得写 `z.date().nullable()` 而不是 `z.date()`。
+- **文件名是作品 id，不带日期**（`movie/1309046.md`）。Jekyll 的 `_posts/` 要求 `YYYY-MM-DD-name.md`，所以这些会被当成 page 而不是 post。想要 post 的话得改名 —— 但那样固定链接就跟着标题/日期走了，而**用 id 做文件名正是为了让固定链接在重新生成之后不变**。
+- **`static/` 的图用绝对路径引用**（`/covers/x.jpg`）。Astro 放 `public/`、Jekyll 放站点根，路径都对得上；换成会加 base path 的部署（GitHub Pages 的项目页）时要自己处理前缀。
+
+## 验过了：Hugo 0.164 构建通过
 
 拿真实的 3098 个页面构建过，**零警告零错误**：
 
@@ -174,7 +187,8 @@ CLAUDE.md 里的硬性规则：**用户的编辑追加到 canonical，任何东�
 标记、作品、长文、广播都做了。对着八份成链的真实档案：
 
 ```
-一条命令   npm run site -- <canonical> <bundles> <out>
+两种产物   npm run md   → Markdown + 图片（给任何 SSG）
+           npm run site → 再构建成 HTML（Hugo）
 生成       页面 3098（标记 2940 · 长文 5 · 广播 3394 条归入 152 个月）
            图片 3045 张（封面 2921 + 自己上传的 124）· 2.9 秒 · 128 MB
 构建       Hugo 0.164 · 零警告零错误 · 3803 页 · 2.8 秒 · 4596 个 HTML / 147 MB

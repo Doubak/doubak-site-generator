@@ -311,11 +311,32 @@ describe('Hugo 骨架', () => {
     assert.equal(r.theme, THEME);
   });
 
-  test('不给 themeDir 就只出 content/static', () => {
+  test('**不给 themeDir，产出里不许有任何 Hugo 专属的东西**', () => {
+    // Markdown 才是这个工具的产物，HTML 只是它的一个消费者。有人要把 content/
+    // 塞进 Astro / Eleventy / Jekyll，那时候多出一个 hugo.toml 不只是碍事——
+    // Hugo 之外的 SSG 见到它多半会当成待渲染的内容文件。
     const out = mkdtempSync(join(tmpdir(), 'doubak-notheme-'));
-    const r = generate({ canonical: { marks: [], subjects: [], longform: [], broadcasts: [] }, outDir: out });
-    assert.ok(!existsSync(join(out, 'hugo.toml')));
+    const r = generate({
+      canonical: {
+        marks: [mark()], subjects: [subject()], longform: [], broadcasts: [],
+      },
+      outDir: out,
+    });
     assert.equal(r.theme, null);
+    assert.deepEqual(readdirSync(out).sort(), ['content']);
+    const all = readdirSync(out, { recursive: true }).map(String);
+    for (const f of all) {
+      assert.ok(!/hugo|layouts|\.html$/i.test(f), `产出里混进了 Hugo 专属的 ${f}`);
+    }
+  });
+
+  test('front matter 里除了三个通用键，全部带 douban_ 前缀', () => {
+    // 前缀是为了不撞上主题自己的约定。撞上了不会报错——主题会拿我们的值
+    // 去做它自己的事，页面看起来正常而内容是错的。
+    const [pm] = project({ marks: [mark()], subjects: [subject()] }).marks;
+    const keys = [...markPage(pm).matchAll(/^([a-z_]+):/gm)].map((m) => m[1]);
+    const strays = keys.filter((k) => !k.startsWith('douban_') && !['title', 'date', 'tags'].includes(k));
+    assert.deepEqual(strays, [], `这些键既不通用也没前缀：${strays.join(' ')}`);
   });
 
   test('**模板里引用的 front matter 键，生成器真的会写**', () => {
