@@ -684,6 +684,31 @@ describe('Hugo 骨架', () => {
     assert.match(base, /doubak-site-generator"[^>]*>源码/);
   });
 
+  test('**站名只出现一次，而它就是首页的 `<h1>`**', () => {
+    // 原来是页眉一个链接、正文再一个 `<h1>`，同一句话在页面上出现两次。把正文那个
+    // 藏起来（`.sr-only`）只解决了眼睛看到的那半边——屏幕阅读器照样连着念两遍。
+    // 干脆删掉又会让首页一个 h1 都没有，而外部检索正是这份存档将来被人找到的方式。
+    //
+    // 一个元素同时干两件事就没有这个矛盾：首页上它是 h1，别处是回首页的链接。
+    const base = readFileSync(join(THEME, 'layouts/_default/baseof.html'), 'utf-8');
+    assert.match(base, /\{\{ if \.IsHome \}\}\s*<h1 class="home">/, '首页的页眉该是 h1');
+    assert.match(base, /\{\{ else \}\}\s*<a class="home"/, '其余页面该还是链接');
+
+    // **先去掉 Hugo 注释再找标签。** 不去的话，那段解释「这里为什么没有 h1」的
+    // 注释本身就带着 `<h1>` 三个字，判据永远为真——一条永远红的判据和一条永远
+    // 绿的一样没用，而这条恰好是永远红。
+    const home = readFileSync(join(THEME, 'layouts/index.html'), 'utf-8')
+      .replace(/\{\{\/\*[\s\S]*?\*\/\}\}/g, '');
+    assert.ok(!/<h1/.test(home), '首页正文里不该再有第二个 h1');
+    // 藏起来不算数：屏幕阅读器还是会念到它。
+    assert.ok(!/sr-only/.test(home), 'sr-only 只是让眼睛看不见，重复仍然在');
+
+    // 样式必须挂在 class 上而不是标签上，否则两种情形会长得不一样。
+    const css = readFileSync(join(THEME, 'static/site.css'), 'utf-8');
+    assert.match(css, /header\.site \.home \{/);
+    assert.match(css, /header\.site \.home a \{ color: inherit/);
+  });
+
   test('**页脚那句「与豆瓣无关」不许删**', () => {
     // 配色像豆瓣是有意的（这是你自己的豆瓣存档），但长得像和冒充是两回事，
     // 而这一句就是两者之间的线。

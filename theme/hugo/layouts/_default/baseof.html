@@ -19,7 +19,22 @@
 <body>
 
 <header class="site"><div class="wrap">
-  <a class="home" href="{{ .Site.Home.RelPermalink }}">{{ .Site.Title }}</a>
+  {{/*
+    **首页上，页眉这句站名本身就是那个 `<h1>`。**
+
+    原来是页眉一个链接、正文再来一个 `<h1>`，同一句话在页面上出现两次；把正文那个
+    藏起来（`.sr-only`）只是让眼睛看不见，屏幕阅读器仍然连着念两遍「我的豆瓣存档」。
+    而干脆删掉又会让首页一个 h1 都没有——那对屏幕阅读器与外部检索都是残的，
+    而检索正是这份存档将来被人找到的方式。
+
+    一个元素同时干两件事就没有这个矛盾：首页上它是 h1，其余页面上它只是回首页的
+    链接（那些页面各自有自己的 h1）。看上去一模一样，样式在 `.home` 上，不在标签上。
+  */}}
+  {{ if .IsHome }}
+    <h1 class="home"><a href="{{ .Site.Home.RelPermalink }}">{{ .Site.Title }}</a></h1>
+  {{ else }}
+    <a class="home" href="{{ .Site.Home.RelPermalink }}">{{ .Site.Title }}</a>
+  {{ end }}
   <nav>
     {{ range .Site.Sections.ByTitle }}
       <a href="{{ .RelPermalink }}"{{ if eq $.Section .Section }} aria-current="page"{{ end }}>{{ index $names .Section | default .Title }}</a>
