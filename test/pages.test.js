@@ -531,6 +531,17 @@ describe('Hugo 骨架', () => {
     assert.ok(existsSync(join(THEME, 'static/site.css')));
   });
 
+  test('**「豆备」两个字链到产品页，不是代码仓库**', () => {
+    // 一个刚看到这份存档、想知道「这是什么、我也能做一个吗」的人，要的是
+    // 产品页；只有想读代码的人才需要 GitHub，那条单独给。
+    const base = readFileSync(join(THEME, 'layouts/_default/baseof.html'), 'utf-8');
+    const m = /<a href="([^"]+)"[^>]*>豆备 \(Doubak\)<\/a>/.exec(base);
+    assert.ok(m, '页脚里找不到「豆备 (Doubak)」这个链接');
+    assert.equal(m[1], 'https://doubak.com');
+    // 源码的去处也要有，只是分开给。
+    assert.match(base, /doubak-site-generator"[^>]*>源码/);
+  });
+
   test('**页脚那句「与豆瓣无关」不许删**', () => {
     // 配色像豆瓣是有意的（这是你自己的豆瓣存档），但长得像和冒充是两回事，
     // 而这一句就是两者之间的线。

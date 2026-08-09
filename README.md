@@ -1,5 +1,8 @@
 # doubak-site-generator
 
+> **这是源码仓库。** 项目主页在 **<https://doubak.com>**，生成出来的样子见
+> **<https://sample.doubak.com>**。
+
 豆备 (Doubak) 的静态网页生成器。把 [canonical](https://github.com/Doubak/doubak-data-specs) 数据转成 **Markdown + YAML front matter**，交给现成的静态站生成器渲染 —— 就像浏览自己开的豆瓣一样。
 
 ```sh
