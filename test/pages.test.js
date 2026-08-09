@@ -571,6 +571,28 @@ describe('广播', () => {
     });
     assert.match(text, /!\[\]\(\/uploads\/p1\.jpg\)/);
   });
+
+  test('**一条广播的附图写在同一行里** —— 一张一段就是一列铺满宽度的大图', () => {
+    // 实测这份档案里一条广播最多带 18 张。一张一段的话每张各占一个 `<p>`，
+    // 在页面上就是十八屏，正文被推到看不见。同一行则渲染成一个 `<p>` 里的
+    // 若干 `<img>`，主题给个高度上限就自动排成会换行的一排。
+    const urls = ['https://img1.doubanio.com/a.jpg', 'https://img1.doubanio.com/b.jpg'];
+    const p = project({ broadcasts: [bc({ images: urls })] });
+    const text = broadcastMonthPage('2021-11', p.broadcasts, {
+      images: { [urls[0]]: '/uploads/a.jpg', [urls[1]]: '/uploads/b.jpg' },
+    });
+    assert.match(text, /\[!\[\]\(\/uploads\/a\.jpg\)\]\(\/uploads\/a\.jpg\) \[!\[\]\(\/uploads\/b\.jpg\)\]\(\/uploads\/b\.jpg\)/);
+    // 缩略之后要能点开看原图，所以每张都链到自己。
+    assert.ok(!/\n!\[\]\(\/uploads\/b/.test(text), '第二张不该另起一段');
+  });
+
+  test('**版式交给主题，正文里不塞 HTML**', () => {
+    // 塞了就得开 unsafe，而那等于让用户文本里的 HTML 在 GitHub Pages 上执行。
+    // 所以缩略是 CSS 的事，Markdown 这一侧只是把它们放在同一行。
+    const p = project({ broadcasts: [bc({ images: ['https://img1.doubanio.com/a.jpg'] })] });
+    const text = broadcastMonthPage('2021-11', p.broadcasts, {});
+    assert.ok(!/<div|<img|<figure/.test(text), '广播页的 Markdown 里出现了 HTML');
+  });
 });
 
 describe('Hugo 骨架', () => {
@@ -599,6 +621,19 @@ describe('Hugo 骨架', () => {
       assert.match(t, /\$section\.RegularPages/, `${f} 该用 .RegularPages`);
       assert.ok(!/\$section\.Pages/.test(t), `${f} 里有 $section.Pages`);
     }
+  });
+
+  test('**只在广播页缩略附图** —— 日记正文里的插图不许跟着缩', () => {
+    // 两者在 Markdown 里长得一模一样（自成一段的 `![](path)`），该有的大小却相反：
+    // 日记的插图是文章的一部分，要看得清；广播的附图是一次发九张十八张的随手拍。
+    // Markdown 分不出来也不该分——版式是主题的事，所以靠 <main> 上的小节 class 分。
+    const base = readFileSync(join(THEME, 'layouts/_default/baseof.html'), 'utf-8');
+    assert.match(base, /<main class="section-\{\{\s*\.Section/, '<main> 上要带小节 class');
+    const css = readFileSync(join(THEME, 'static/site.css'), 'utf-8');
+    assert.match(css, /\.section-broadcast[^{]*img\s*\{[^}]*max-height/,
+      '缩略规则必须限定在 .section-broadcast 里');
+    // 反面：不许有一条不分小节的全局图片高度上限。
+    assert.ok(!/^article img \{[^}]*max-height/m.test(css), '这会把日记的插图也缩了');
   });
 
   test('**筛选片上的条数来自各自那一页，不是当前这一页数出来的**', () => {
@@ -756,6 +791,28 @@ describe('用户写的字必须原样呈现', () => {
     assert.equal(plainText('a-b 正常'), 'a-b 正常');
     assert.equal(plainText('- 列表'), '\\- 列表');
     assert.equal(plainText('第一行\n- 第二行'), '第一行\n\\- 第二行');
+  });
+
+  test('**长文正文里的 `- ` 是解析器写的结构，不转义**', () => {
+    // 那个连字符不是用户敲的，是解析器从页面上的 `<ul><li>` 转出来的（与它插进去的
+    // `![](url)` 同一回事）。转义掉的话，用户那份点列表在页面上变成五行字面的
+    // `- xxx`——实测那篇讲绑定手机号的日记就是这样。
+    assert.equal(
+      plainText('前一段：\n- ck=JBf5\n- area_code=+86', { preserveListMarkers: true }),
+      // 记号免转，**行内的下划线照常转**（`\_` 渲染出来还是 `_`）。
+      '前一段：\n- ck=JBf5\n- area\\_code=+86',
+    );
+    // **这一行剩下的字照常转义**，记号免转不等于整行免转。
+    assert.equal(
+      plainText('- _(:з」∠)_ 与 <tag>', { preserveListMarkers: true }),
+      '- \\_(:з」∠)\\_ 与 &lt;tag&gt;',
+    );
+  });
+
+  test('**广播与短评里的 `- ` 照常转义** —— 那是用户自己敲的', () => {
+    // 豆瓣的广播是纯文本，没有 `<ul>` 这回事，所以那儿的连字符就是五个字面字符。
+    // 开关默认关着，只有长文正文那一条路径打开它。
+    assert.equal(plainText('- ck=JBf5'), '\\- ck=JBf5');
   });
 
   test('**有序列表转义的是点，不是数字**', () => {

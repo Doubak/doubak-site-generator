@@ -188,12 +188,14 @@ export function longformPage(r, { images = {} } = {}) {
   for (const [url, path] of Object.entries(images)) {
     if (body.includes(url)) body = body.split(url).join(path);
   }
-  // 正文里**混着两种东西**：用户写的字，和解析器插进去的 `![](url)` 图片标记。
-  // 只能转义前者——把图片标记也转义掉，图就变成一行字面文本了。
-  // 所以按图片标记切开，只转义中间那些段。
+  // 正文里**混着两种东西**：用户写的字，和解析器从页面结构转出来的记号
+  // （`![](url)` 图片、`- ` 列表项）。只能转义前者——把结构记号也转义掉，
+  // 图会变成一行字面文本，点列表会变成五行字面的 `- xxx`。
+  //
+  // 图片按标记切开；列表记号在行首，交给 plainText 自己认（见那边的说明）。
   body = body
     .split(/(!\[\]\([^)]*\))/)
-    .map((seg, i) => (i % 2 === 1 ? seg : plainText(seg)))
+    .map((seg, i) => (i % 2 === 1 ? seg : plainText(seg, { preserveListMarkers: true })))
     .join('');
   return frontMatter(fm) + (body ? `\n${body}\n` : '');
 }
@@ -328,10 +330,23 @@ export function broadcastMonthPage(month, list, { images = {} } = {}) {
         ? `*（豆瓣在这里截断了，[全文在这篇${b.fullText.kind === 'review' ? '评论' : '日记'}里](../${b.fullText.kind}/${b.fullText.id}.md)）*`
         : '*（豆瓣在这里截断了，全文不在档案里）*', '');
     }
-    for (const url of b.images) {
+    if (b.images.length) {
+      // **一条广播的附图写在同一行里，不是一张一段。**
+      //
+      // 一张一段的话每张图各占一个 `<p>`，在页面上就是一列铺满宽度的大图——
+      // 实测这份档案里一条广播最多带 18 张，那是十八屏。写在同一行则渲染成一个
+      // `<p>` 里的若干 `<img>`，主题给它们一个高度上限就自动排成会换行的一排。
+      //
+      // 每张都链到自己：缩略之后要能点开看原图。这仍然是**纯 Markdown**，
+      // 换任何一个 SSG 都成立——版式交给主题，不往正文里塞 HTML
+      // （塞了就得开 unsafe，而那等于让用户文本里的 HTML 在 GitHub Pages 上执行）。
+      //
       // 没导出的图保持原样：留一个指向 doubanio 的 URL，总比悄悄删掉一张图好
       // ——前者至少说明「这儿本来有图」。
-      out.push(`![](${images[url] ?? url})`, '');
+      out.push(b.images.map((url) => {
+        const p = images[url] ?? url;
+        return `[![](${p})](${p})`;
+      }).join(' '), '');
     }
     return out.join('\n');
   });
@@ -381,11 +396,37 @@ export function monthOf(b) {
  * 尖括号与 `&` 用 HTML 实体（反斜杠对它们无效），其余行内记号用反斜杠，块首记号
  * 只在行首转义——`a-b` 里的连字符不该被动，`- item` 里的必须被动。
  *
+ * ## `preserveListMarkers`：谁写的那个 `-`
+ *
+ * 长文正文里的 `- ` **不是用户敲的**，是解析器从页面上的 `<ul><li>` 转出来的
+ * （与它插进去的 `![](url)` 同一回事）。把它转义掉，用户那份点列表就在页面上
+ * 变成五行字面的 `- xxx`。
+ *
+ * 而广播里的 `- ` 恰恰相反：豆瓣的广播是纯文本，那儿的连字符就是用户自己敲的
+ * 五个字符，必须原样显示。**页面自己告诉了我们是哪一种**——有 `<ul>` 标记的是
+ * 结构，没有的是字面。所以这个开关只对长文正文打开，广播与短评一律照旧转义。
+ *
+ * 长文正文里同时出现「解析器转出来的列表」与「用户自己敲的行首连字符」时，
+ * 两者无从分辨。实测这份真实档案的 2898 段自撰文本里，行首带列表记号的只有 1 段，
+ * 而它是广播（走的是转义那条路）——长文那边一例都没有。
+ *
  * @param {string|null|undefined} s
+ * @param {{preserveListMarkers?: boolean}} [opts]
  * @returns {string} 渲染之后与输入逐字相同的 Markdown
  */
-export function plainText(s) {
+export function plainText(s, { preserveListMarkers = false } = {}) {
   if (!s) return '';
+  // **先按行拆，再逐行转义。** 在下面那串整串 replace 之后才动手是不行的：
+  // 那时反斜杠、实体、行内记号都已经转过一遍，再调一次就是转两遍
+  // （实测得到 `\\\\\\_` 与 `&amp;lt;`）。
+  if (preserveListMarkers && /^- \S/m.test(s)) {
+    return s.split('\n')
+      .map((line) => (/^- \S/.test(line)
+        // 解析器写的列表记号原样留下，**这一行剩下的字照常转义**。
+        ? `- ${plainText(line.slice(2))}`
+        : plainText(line)))
+      .join('\n');
+  }
   return s
     // 反斜杠必须第一个处理，否则会把后面加的反斜杠又转义一遍。
     .replace(/\\/g, '\\\\')

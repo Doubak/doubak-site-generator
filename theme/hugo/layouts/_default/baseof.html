@@ -28,7 +28,15 @@
   </nav>
 </div></header>
 
-<main><div class="wrap">
+{{/*
+  小节名挂到 <main> 上，样式表才有办法「只在广播页」生效。
+
+  这不是装饰：广播的附图与日记正文里的插图在 Markdown 里长得一模一样
+  （都是自成一段的 `![](path)`），而它们该有的大小正相反——日记的插图是文章的
+  一部分，要看得清；广播的附图是一次发九张、十八张的随手拍，铺满屏就没法读了。
+  Markdown 分不出来，也不该分——**版式是主题的事**，那就在主题这一侧分。
+*/}}
+<main class="section-{{ .Section | default "home" }}"><div class="wrap">
 {{ block "main" . }}{{ end }}
 </div></main>
 
