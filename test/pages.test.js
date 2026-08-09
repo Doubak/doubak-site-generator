@@ -609,18 +609,38 @@ describe('Hugo 骨架', () => {
     }
   });
 
-  test('**作品网格与「全部」那一片都用 .RegularPages，不用 .Pages**', () => {
+  test('**凡是数作品条数的地方都用 .RegularPages，不用 .Pages**', () => {
     // `movie/done/` 是 movie 底下的一个子小节，而 Hugo 的 `.Pages` 把子小节也
-    // 算进去。实测：把这两处换成 `.Pages` 重新构建，「全部」那一片从 **2102
-    // 变成 2105**——多出来的正是 done/doing/wish 三个筛选页自己。
+    // 算进去。实测：换成 `.Pages` 重新构建，「全部」那一片从 **2102 变成 2105**
+    // ——多出来的正是 done/doing/wish 三个筛选页自己。
     //
     // 页面照常渲染，Hugo 不报一句警告，只是数字悄悄错掉。而这个站点上的数字
-    // 是它唯一的实质内容。
-    for (const f of ['layouts/_default/list.html', 'layouts/partials/statuschips.html']) {
-      const t = readFileSync(join(THEME, f), 'utf-8');
-      assert.match(t, /\$section\.RegularPages/, `${f} 该用 .RegularPages`);
-      assert.ok(!/\$section\.Pages/.test(t), `${f} 里有 $section.Pages`);
+    // 就是它的实质内容。
+    //
+    // **这条判据原来只盯着两个文件**，于是首页那一行「浏览」漏在外面，
+    // 上线时写着「影视 2105 · 书 148 · 游戏 607」，每一项都比真值多出它自己的
+    // 筛选页数。所以现在改成扫整个 layouts/：**只要在数页数，就必须是
+    // RegularPages**。广播那边数的是「多少个月」，那是子页不是子小节，
+    // 所以按文件豁免并注明。
+    const dir = join(THEME, 'layouts');
+    /** @returns {string[]} */
+    const walk = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory()
+      ? walk(join(d, e.name))
+      : [join(d, e.name)]));
+
+    const offenders = [];
+    for (const f of walk(dir)) {
+      const rel = f.slice(dir.length + 1);
+      readFileSync(f, 'utf-8').split('\n').forEach((line, i) => {
+        // 广播按月归档，`.Pages` 在那儿数的是月份页（子页，不是子小节），是对的。
+        if (/douban_count|个月/.test(line)) return;
+        if (/\blen\s+\$?[\w.]*\.Pages\b/.test(line)) offenders.push(`${rel}:${i + 1}`);
+      });
     }
+    assert.deepEqual(
+      offenders, [],
+      '这些地方在用 .Pages 数页数，而它把 movie/done/ 这类筛选子小节也算了进去',
+    );
   });
 
   test('**只在广播页缩略附图** —— 日记正文里的插图不许跟着缩', () => {
