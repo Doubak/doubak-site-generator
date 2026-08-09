@@ -1,0 +1,39 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # 依赖是空的，不需要 npm install。这不是省事，是这个项目的立身之本之一：
+      # 一个要装几百个包才能重建的存档站是自相矛盾的（见 README）。
+      - name: 跑测试
+        run: npm test
+
+      # **换一个时区再跑一遍。**
+      #
+      # 这条是被真事逼出来的：扩展那边一条断言写死了本地时区下的时刻，
+      # 本地全绿、CI 全红——而那是运气好，CI 恰好在 UTC。要是 CI 也在同一个
+      # 时区，这个 bug 会一直潜到某个用户那里才炸。
+      #
+      # 生成器尤其吃这一套：它满篇都是时间——标记日期、广播的秒级时间戳、
+      # 按月归档的分组。分组要是按 UTC 切，每月头几个小时的广播会掉到上个月。
+      - name: 换个时区再跑一遍
+        env:
+          TZ: Pacific/Kiritimati
+        run: npm test
+
+      # 产出的每一份 front matter 都要能被读回来。这一条不需要 SSG，也不需要
+      # 真实档案——**用合成数据跑一遍完整生成**，再把每个 .md 的 front matter
+      # 用一个独立写的读取器解一遍。
+      - name: 生成一遍并检查 front matter
+        run: node tools/smoke.mjs
