@@ -22,6 +22,7 @@ import { project, groupMarks } from './projection.js';
 import {
   markPage, longformPage, markPath, longformPath, verb,
   broadcastMonthPage, broadcastMonthPath, monthOf,
+  markFilterPath, markFilterPage,
 } from './markdown.js';
 import { indexImages, exportImages } from './images.js';
 import { buildSearchIndex } from './search.js';
@@ -114,6 +115,14 @@ export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir
     files.push([join('content', broadcastMonthPath(month)), broadcastMonthPage(month, list, { images: paths })]);
   }
 
+  // 每个媒介的每个状态一页（`movie/done/`）。**只给真有条目的状态出页**——
+  // 一个「在读 0」的空页会让人以为是页面坏了，而不是「本来就没有」。
+  for (const [medium, byStatus] of groupMarks(p.marks)) {
+    for (const [status, list] of byStatus) {
+      files.push([join('content', markFilterPath(medium, status)), markFilterPage(medium, status, list.length)]);
+    }
+  }
+
   files.push(['content/_index.md', homePage(p)]);
 
   // ── 搜索索引
@@ -174,7 +183,10 @@ function homePage(p) {
   for (const [medium, byStatus] of [...groups].sort()) {
     lines.push(`## ${MEDIUM_NAMES[medium] ?? medium}`, '');
     for (const [status, list] of [...byStatus].sort()) {
-      lines.push(`- ${verb(medium, status)} ${list.length}`);
+      // **链到文件，不写死固定链接。** 与正文里的作品交叉链接同一条规则：
+      // 生成器只说「那份内容在这个文件里」，最终 URL 由 SSG 决定——第一版写死
+      // `/movie/123/` 的那次，打开 uglyURLs 就全断了。
+      lines.push(`- [${verb(medium, status)} ${list.length}](${markFilterPath(medium, status)})`);
     }
     lines.push('');
   }

@@ -1,26 +1,45 @@
 {{ define "main" }}
 
-{{ $isMedia := in (slice "movie" "book" "music" "game" "drama") .Section }}
+{{/*
+  这一个模板管三种列表页：作品网格、广播时间线、日记与评论。
+
+  作品网格现在有两副面孔，用的是**同一段代码**：
+
+    /movie/            这个媒介的全部
+    /movie/done/       这个媒介里「看过」的那些（front matter: douban_kind=mark-filter）
+
+  后者是真页面而不是前端开关——理由写在 partials/statuschips.html 里。
+  两者共用一段渲染，所以「筛选之后长得不一样」这种事从结构上就不会发生。
+*/}}
+
+{{ $isFilter := eq .Params.douban_kind "mark-filter" }}
+{{/* 筛选页挂在媒介那一节底下，所以「这是哪个媒介」要看父节。 */}}
+{{ $section := cond $isFilter .Parent . }}
+{{ $isMedia := in (slice "movie" "book" "music" "game" "drama") $section.Section }}
 {{ $isBroadcast := eq .Section "broadcast" }}
 {{/* Hugo 会把 [params] 里的键全部转成小写，所以是 mediumnames 而不是 mediumNames。 */}}
 {{ $names := .Site.Params.mediumnames }}
+{{ $mediumName := index $names $section.Section | default $section.Title }}
 
-<h1>{{ index $names .Section | default .Title }}</h1>
+{{ if and $isMedia $isFilter }}
+  <h1>{{ $mediumName }} · {{ .Params.douban_verb }}</h1>
+{{ else }}
+  <h1>{{ index $names .Section | default .Title }}</h1>
+{{ end }}
 
 {{ if $isMedia }}
   {{/*
-    汇总条**在整个板块上算，不是当前这一页**。「看过 1336」必须是总数——
-    写成当前页的话它会随翻页而变，而一个会变的计数比没有计数更糟：
-    它看起来是个事实。
-  */}}
-  <div class="summary">
-    {{ range .Pages.GroupByParam "douban_status" }}
-      {{ $verb := "" }}{{ range first 1 .Pages }}{{ $verb = .Params.douban_verb }}{{ end }}
-      <span>{{ $verb | default .Key }} <b>{{ len .Pages }}</b></span>
-    {{ end }}
-  </div>
+    **这一节的全部条目，而不是当前这一页。**
 
-  {{ $paginator := .Paginate .Pages.ByDate.Reverse }}
+    `.RegularPages` 而不是 `.Pages`：后者还包含子小节，而 `movie/done/` 就是
+    一个子小节——用 `.Pages` 的话筛选页自己会作为一张没有封面的卡片混进网格里。
+  */}}
+  {{ $all := $section.RegularPages }}
+  {{ $pages := cond $isFilter (where $all "Params.douban_status" "eq" .Params.douban_status) $all }}
+
+  {{ partial "statuschips.html" (dict "section" $section "current" (cond $isFilter .Params.douban_status "")) }}
+
+  {{ $paginator := .Paginate $pages.ByDate.Reverse }}
   <ul class="grid">
     {{ range $paginator.Pages }}
       <li>

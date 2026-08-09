@@ -210,6 +210,47 @@ export function markPath(m) {
   return `${m.medium}/${m.subjectId}.md`;
 }
 
+/**
+ * 「影视 · 看过」这样一页：某个媒介里某个状态的全部标记。
+ *
+ * ## 为什么是**真的一页**，不是页面上的一个开关
+ *
+ * 前端过滤只能过滤当前这一页——影视有 2102 条、每页 48 条，点「看过」会得到
+ * 「这 48 条里的看过」，而那是个看起来在工作、其实在骗人的按钮。
+ *
+ * 做成真页面则：能收藏、能分享、能在 file:// 下打开、不需要 JS，翻页也照常。
+ * 这与「广播是可以一直翻下去的时间线，不是 152 个月份的目录」是同一条取舍——
+ * **能直接看到东西的那种结构，胜过需要再点一次的那种。**
+ *
+ * ## 路径是 `<媒介>/<状态>/`，不是 `<媒介>-<状态>/`
+ *
+ * 放在媒介底下，顶层小节表就不会多出十几项（首页的「浏览」那一行读的是顶层）。
+ * 与作品页 `movie/1292052.md` 不会撞：状态只有 `done|wish|doing` 三个词，
+ * 而作品 id 全是数字。
+ *
+ * @param {string} medium
+ * @param {string} status
+ */
+export function markFilterPath(medium, status) {
+  return `${medium}/${status}/_index.md`;
+}
+
+/**
+ * @param {string} medium
+ * @param {string} status
+ * @param {number} count 这一格有多少条。**是数出来的，不是声称的**
+ */
+export function markFilterPage(medium, status, count) {
+  return frontMatter({
+    title: verb(medium, status),
+    douban_kind: 'mark-filter',
+    douban_medium: medium,
+    douban_status: status,
+    douban_verb: verb(medium, status),
+    douban_count: count,
+  });
+}
+
 /** @param {object} r */
 export function longformPath(r) {
   return `${r.kind}/${r.id}.md`;

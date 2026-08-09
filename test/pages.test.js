@@ -18,6 +18,7 @@ import { project, groupMarks } from '../src/projection.js';
 import {
   markPage, longformPage, markPath, longformPath, verb,
   broadcastMonthPage, broadcastMonthPath, monthOf, plainText,
+  markFilterPath, markFilterPage,
 } from '../src/markdown.js';
 
 /** 造一条 canonical 标记。 */
@@ -371,6 +372,70 @@ describe('分组', () => {
   });
 });
 
+describe('按状态筛选', () => {
+  /** 每种状态各来一条，外加一条别的媒介。 */
+  const mixed = () => ({
+    marks: [
+      mark({ upstream_id: '1', subject: { id: '1', url: 'https://movie.douban.com/subject/1/', upstream_deleted: false }, revisions: [rev({ status: 'done' }, '2026-08-01T00:00:00+08:00')] }),
+      mark({ upstream_id: '2', subject: { id: '2', url: 'https://movie.douban.com/subject/2/', upstream_deleted: false }, revisions: [rev({ status: 'done' }, '2026-08-02T00:00:00+08:00')] }),
+      mark({ upstream_id: '3', subject: { id: '3', url: 'https://movie.douban.com/subject/3/', upstream_deleted: false }, revisions: [rev({ status: 'wish' }, '2026-08-03T00:00:00+08:00')] }),
+      mark({ upstream_id: '4', medium: 'book', subject: { id: '4', url: 'https://book.douban.com/subject/4/', upstream_deleted: false }, revisions: [rev({ status: 'done' }, '2026-08-04T00:00:00+08:00')] }),
+    ],
+    subjects: [], longform: [], broadcasts: [],
+  });
+
+  test('路径挂在媒介底下 —— 顶层小节表不该多出十几项', () => {
+    // 写成 `movie-done/` 的话，首页那一行「浏览」会从 8 项涨到 20 多项，
+    // 而那一行读的是顶层小节。
+    assert.equal(markFilterPath('movie', 'done'), 'movie/done/_index.md');
+    assert.equal(markFilterPath('book', 'wish'), 'book/wish/_index.md');
+  });
+
+  test('动词跟着媒介走 —— 「看过一本书」是错的说法', () => {
+    assert.match(markFilterPage('book', 'done', 45), /douban_verb: "读过"/);
+    assert.match(markFilterPage('movie', 'done', 45), /douban_verb: "看过"/);
+    assert.match(markFilterPage('game', 'wish', 3), /douban_verb: "想玩"/);
+  });
+
+  test('条数写进 front matter —— **它是生成时数出来的，不是当前这一页里数的**', () => {
+    // 主题拿这个数画筛选片。若改成在模板里数当前页，「看过 1336」会随翻页变成
+    // 「看过 48」——一个会变的计数比没有计数更糟：它看起来是个事实。
+    assert.match(markFilterPage('movie', 'done', 1336), /douban_count: 1336/);
+  });
+
+  test('**只给真有条目的状态出页** —— 空的「在读 0」看起来像页面坏了', () => {
+    const out = mkdtempSync(join(tmpdir(), 'doubak-filter-'));
+    generate({ canonical: mixed(), outDir: out });
+    const all = readdirSync(join(out, 'content'), { recursive: true }).map(String);
+    assert.ok(all.includes(join('movie', 'done', '_index.md')));
+    assert.ok(all.includes(join('movie', 'wish', '_index.md')));
+    assert.ok(all.includes(join('book', 'done', '_index.md')));
+    // movie 里没有 doing，book 里没有 wish —— 都不该凭空出现
+    assert.ok(!all.includes(join('movie', 'doing', '_index.md')), '没有「在看」就不该有那一页');
+    assert.ok(!all.includes(join('book', 'wish', '_index.md')), '没有「想读」就不该有那一页');
+  });
+
+  test('数出来的条数按媒介分开算', () => {
+    const out = mkdtempSync(join(tmpdir(), 'doubak-filter2-'));
+    generate({ canonical: mixed(), outDir: out });
+    const read = (p) => readFileSync(join(out, 'content', p), 'utf-8');
+    assert.match(read(markFilterPath('movie', 'done')), /douban_count: 2/);
+    // 书那条也是 done，但**不能**被算进影视里
+    assert.match(read(markFilterPath('book', 'done')), /douban_count: 1/);
+  });
+
+  test('**首页那些数字是链接，且链到文件而不是写死的固定链接**', () => {
+    const out = mkdtempSync(join(tmpdir(), 'doubak-filter3-'));
+    generate({ canonical: mixed(), outDir: out });
+    const home = readFileSync(join(out, 'content/_index.md'), 'utf-8');
+    assert.match(home, /- \[看过 2\]\(movie\/done\/_index\.md\)/);
+    assert.match(home, /- \[读过 1\]\(book\/done\/_index\.md\)/);
+    // 写死 `/movie/done/` 的那种在打开 uglyURLs 之后全断，file:// 下更是
+    // 每一条都掉进目录列表里。这条已经栽过一次，见 CLAUDE.md。
+    assert.ok(!/\]\(\//.test(home), '首页链接里出现了绝对路径');
+  });
+});
+
 /** 造一条 canonical 广播。 */
 const bc = (fields, over = {}) => ({
   canonical_version: 'canonical/1.0',
@@ -517,9 +582,31 @@ describe('Hugo 骨架', () => {
     for (const f of ['hugo.toml', 'layouts/index.html', 'static/site.css',
       'layouts/_default/baseof.html', 'layouts/_default/list.html',
       'layouts/_default/single.html', 'layouts/partials/stars.html',
-      'layouts/partials/pager.html']) {
+      'layouts/partials/pager.html', 'layouts/partials/statuschips.html']) {
       assert.ok(existsSync(join(THEME, f)), `骨架缺 ${f}`);
     }
+  });
+
+  test('**作品网格与「全部」那一片都用 .RegularPages，不用 .Pages**', () => {
+    // `movie/done/` 是 movie 底下的一个子小节，而 Hugo 的 `.Pages` 把子小节也
+    // 算进去。实测：把这两处换成 `.Pages` 重新构建，「全部」那一片从 **2102
+    // 变成 2105**——多出来的正是 done/doing/wish 三个筛选页自己。
+    //
+    // 页面照常渲染，Hugo 不报一句警告，只是数字悄悄错掉。而这个站点上的数字
+    // 是它唯一的实质内容。
+    for (const f of ['layouts/_default/list.html', 'layouts/partials/statuschips.html']) {
+      const t = readFileSync(join(THEME, f), 'utf-8');
+      assert.match(t, /\$section\.RegularPages/, `${f} 该用 .RegularPages`);
+      assert.ok(!/\$section\.Pages/.test(t), `${f} 里有 $section.Pages`);
+    }
+  });
+
+  test('**筛选片上的条数来自各自那一页，不是当前这一页数出来的**', () => {
+    // 在模板里数当前页的话，「看过 1336」会随翻页变成「看过 48」。
+    // 一个会变的计数比没有计数更糟：它看起来是个事实。
+    const chips = readFileSync(join(THEME, 'layouts/partials/statuschips.html'), 'utf-8');
+    assert.match(chips, /\.Params\.douban_count/);
+    assert.ok(!/len \$paginator/.test(chips));
   });
 
   test('**样式在 site.css，不内联在模板里**', async () => {
