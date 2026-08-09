@@ -2,44 +2,41 @@
 
 {{ $isMedia := in (slice "movie" "book" "music" "game" "drama") .Section }}
 {{ $isBroadcast := eq .Section "broadcast" }}
-{{/* Hugo 会把 [params] 里的键全部转成小写，所以这里写 mediumnames 而不是 mediumNames。 */}}
+{{/* Hugo 会把 [params] 里的键全部转成小写，所以是 mediumnames 而不是 mediumNames。 */}}
 {{ $names := .Site.Params.mediumnames }}
 
 <h1>{{ index $names .Section | default .Title }}</h1>
 
 {{ if $isMedia }}
   {{/*
-    ## 为什么这里分页，而不是按状态分组一次铺完
-
-    先前是「按状态分成三组、全部铺出来」。看着整齐，实际不能用：影视有 2102 条，
-    一页两千多张图。改成分页，状态退成每张卡片上的一个词，另外在顶上给一行汇总。
-
-    汇总那一行是**在整个 section 上算的，不是在当前这一页上算的**——
-    「看过 1336」必须是总数。写成当前页的话它会随翻页而变，而一个会变的计数
-    比没有计数更糟：它看起来是个事实。
+    汇总条**在整个板块上算，不是当前这一页**。「看过 1336」必须是总数——
+    写成当前页的话它会随翻页而变，而一个会变的计数比没有计数更糟：
+    它看起来是个事实。
   */}}
-  <p class="dim">
+  <div class="summary">
     {{ range .Pages.GroupByParam "douban_status" }}
       {{ $verb := "" }}{{ range first 1 .Pages }}{{ $verb = .Params.douban_verb }}{{ end }}
-      {{ $verb | default .Key }} {{ len .Pages }}{{ if not (eq .Key "wish") }} · {{ end }}
+      <span>{{ $verb | default .Key }} <b>{{ len .Pages }}</b></span>
     {{ end }}
-  </p>
+  </div>
 
   {{ $paginator := .Paginate .Pages.ByDate.Reverse }}
   <ul class="grid">
     {{ range $paginator.Pages }}
       <li>
         <a href="{{ .RelPermalink }}">
-          {{ with .Params.douban_cover }}
-            <img src="{{ . }}" alt="" loading="lazy">
-          {{ else }}
-            {{/* 上游被删的作品就是没有封面。豆瓣的占位图不是内容，生成器已经把它去掉了。 */}}
-            <div class="nocover">无封面</div>
-          {{ end }}
+          <div class="shot">
+            {{ with .Params.douban_cover }}
+              <img src="{{ . }}" alt="" loading="lazy">
+            {{ else }}
+              {{/* 上游被删的作品就是没有封面。豆瓣的占位图不是内容，生成器已经去掉了。 */}}
+              <div class="nocover">无封面</div>
+            {{ end }}
+          </div>
           <div class="t">{{ .Title }}</div>
           <div class="m">
-            {{ .Params.douban_verb }}
-            {{ with .Params.douban_rating }} · {{ . }} 星{{ end }}
+            <span>{{ .Params.douban_verb }}</span>
+            {{ partial "stars.html" .Params.douban_rating }}
           </div>
         </a>
       </li>
@@ -49,28 +46,23 @@
 
 {{ else if $isBroadcast }}
   {{/*
-    ## 广播是一条时间线，翻页翻的是时间线本身
-
-    不是「152 个月份的目录」——那样要点两次才看得到一条广播，而广播恰恰是这份
-    档案里最该被读到的东西。所以这里直接把每个月的正文渲染出来，一页几个月，
-    一直翻到底。
-
-    每页 4 个月（实测平均每月 22 条，约等于一页 90 条）。月份本身仍然有各自的
-    固定链接，从下面每段的标题进去。
+    广播是一条可以一直翻下去的时间线，不是「152 个月份的目录」——目录要点两次
+    才看得到一条广播，而广播恰恰是这份档案里最该被读到的东西。
   */}}
-  <p class="dim">
-    共 {{ len .Pages }} 个月 ·
-    {{ $n := 0 }}{{ $t := 0 }}
-    {{ range .Pages }}{{ $n = add $n (.Params.douban_count | default 0) }}{{ $t = add $t (.Params.douban_with_text | default 0) }}{{ end }}
-    {{ $n }} 条广播，其中 {{ $t }} 条带正文
-  </p>
+  {{ $n := 0 }}{{ $t := 0 }}
+  {{ range .Pages }}{{ $n = add $n (.Params.douban_count | default 0) }}{{ $t = add $t (.Params.douban_with_text | default 0) }}{{ end }}
+  <div class="summary">
+    <span>共 <b>{{ len .Pages }}</b> 个月</span>
+    <span><b>{{ $n }}</b> 条广播</span>
+    <span>其中 <b>{{ $t }}</b> 条带正文</span>
+  </div>
   <blockquote>广播发布后不可编辑，所以每条都是那一刻的原话。</blockquote>
 
   {{ $paginator := .Paginate .Pages.ByDate.Reverse 4 }}
   {{ range $paginator.Pages }}
     <section class="entry">
       <h2><a href="{{ .RelPermalink }}">{{ .Title }}</a>
-        <span class="dim">{{ .Params.douban_count }} 条</span></h2>
+        <span class="chip chip-plain">{{ .Params.douban_count }} 条</span></h2>
       {{ .Content }}
     </section>
   {{ end }}
@@ -79,11 +71,15 @@
 {{ else }}
   {{/* 日记与评论：数量少，一条一行足够。 */}}
   {{ $paginator := .Paginate .Pages.ByDate.Reverse }}
-  <ul>
+  <ul class="plainlist">
     {{ range $paginator.Pages }}
-      <li>
-        <a href="{{ .RelPermalink }}">{{ .Title }}</a>
-        {{ with .Params.douban_published_at_raw }}<span class="dim">{{ . }}</span>{{ end }}
+      <li class="entry">
+        <a href="{{ .RelPermalink }}"><b>{{ .Title }}</b></a>
+        <div class="meta-line">
+          {{ with .Params.douban_published_at_raw }}{{ . }}{{ end }}
+          {{ with .Params.douban_location }} · {{ . }}{{ end }}
+          {{ partial "stars.html" .Params.douban_rating }}
+        </div>
       </li>
     {{ end }}
   </ul>

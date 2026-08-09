@@ -4,83 +4,72 @@
 <article>
 
 {{ if eq .Params.douban_kind "mark" }}
-  {{/* ── 一条标记：作品 + 我对它做了什么 ───────────────────────────────── */}}
-  <h1>{{ .Title }}</h1>
-
-  <p class="dim">
-    {{ index $names .Params.douban_medium | default .Params.douban_medium }}
-    · {{ .Params.douban_verb }}
-    {{ with .Params.douban_marked_at_raw }} · {{ . }}{{ end }}
-    {{ with .Params.douban_rating }} · {{ . }} 星{{ end }}
-  </p>
+  {{/* ── 一条标记：作品 + 我对它做了什么 ─────────────────────────── */}}
+  <div class="subject-head">
+    {{ with .Params.douban_cover }}<img src="{{ . }}" alt="" loading="lazy">{{ end }}
+    <div class="facts">
+      <h1>{{ .Title }}</h1>
+      <div class="meta-line">
+        <span class="chip">{{ .Params.douban_verb }}</span>
+        {{ partial "stars.html" .Params.douban_rating }}
+        {{ with .Params.douban_marked_at_raw }}<span> · {{ . }}</span>{{ end }}
+        <span> · {{ index $names .Params.douban_medium | default .Params.douban_medium }}</span>
+      </div>
+      {{ with .Params.douban_aliases }}
+        {{/* 又名要显示出来。从「重返沉默之丘」搜进来的人看到的标题是《重返寂静岭》，
+             页面上不写又名的话，他会以为搜错了。 */}}
+        <div class="aka">又名：{{ delimit . " / " }}</div>
+      {{ end }}
+      {{ with .Params.douban_meta }}
+        {{/* 那一行元信息原样带过来，不在这一层拆——实测电影 2090 条里出现过
+             43 种段数，按位置拆多数行都是错的。 */}}
+        <div class="meta-line">{{ . }}</div>
+      {{ end }}
+      {{ with .Params.tags }}<div class="meta-line">{{ range . }}<span class="chip chip-plain">{{ . }}</span> {{ end }}</div>{{ end }}
+    </div>
+  </div>
 
   {{ if .Params.douban_upstream_deleted }}
-    {{/*
-      **这一句是这个项目的卖点，不是错误提示。**
-      豆瓣把条目删了，而你的评分、标签、短评还在——它们是你自己写的，没跟着消失。
-      标题那句「未知作品」是如实的：我们不知道它叫什么，而不是我们弄丢了。
-    */}}
+    {{/* **这一句是这个项目的卖点，不是错误提示。** 豆瓣把条目删了，而你的评分、
+         标签、短评还在——它们是你自己写的，没跟着消失。 */}}
     <blockquote>豆瓣上这个条目已经不存在了。下面这些是你自己写的，它们没有跟着消失。</blockquote>
-  {{ end }}
-
-  {{ with .Params.douban_aliases }}
-    {{/*
-      又名要显示出来。它不只是给搜索用的——从「重返沉默之丘」搜进来的人
-      看到的标题是《重返寂静岭》，页面上不写又名的话，他会以为搜错了。
-
-      无语言标注，原样按豆瓣给的顺序列（排第一的通常是最通行的那个译名）。
-    */}}
-    <p class="dim">又名：{{ delimit . " / " }}</p>
-  {{ end }}
-
-  {{ with .Params.douban_cover }}<p><img src="{{ . }}" alt="" style="max-width:14rem"></p>{{ end }}
-
-  {{ with .Params.douban_meta }}
-    {{/* 导演、演员那一串原样带过来的，不在任何一层拆——实测电影 2090 条里
-         出现过 43 种段数，按位置拆多数行都是错的。 */}}
-    <p class="dim">{{ . }}</p>
   {{ end }}
 
   {{ .Content }}
 
-  {{ with .Params.tags }}
-    <p class="dim">标签：{{ delimit . " · " }}</p>
-  {{ end }}
-
 {{ else if eq .Params.douban_kind "broadcast_month" }}
-  {{/* ── 某个月的广播 ──────────────────────────────────────────────────── */}}
+  {{/* ── 某个月的广播 ─────────────────────────────────────────── */}}
   <h1>{{ .Title }}</h1>
-  <p class="dim">
-    {{ .Params.douban_count }} 条 · 其中 {{ .Params.douban_with_text }} 条带正文
-    {{ with .Params.douban_images }} · 图 {{ . }} 张{{ end }}
-  </p>
+  <div class="summary">
+    <span><b>{{ .Params.douban_count }}</b> 条</span>
+    <span>其中 <b>{{ .Params.douban_with_text }}</b> 条带正文</span>
+    {{ with .Params.douban_images }}<span>图 <b>{{ . }}</b> 张</span>{{ end }}
+  </div>
   <blockquote>广播发布后不可编辑，所以每条都是那一刻的原话。</blockquote>
   {{ .Content }}
 
 {{ else }}
-  {{/* ── 日记 / 评论 ───────────────────────────────────────────────────── */}}
+  {{/* ── 日记 / 评论 ──────────────────────────────────────────── */}}
   <h1>{{ .Title }}</h1>
-  <p class="dim">
-    {{ index $names .Params.douban_kind | default .Params.douban_kind }}
-    {{ with .Params.douban_published_at_raw }} · {{ . }}{{ end }}
-    {{ with .Params.douban_location }} · {{ . }}{{ end }}
-    {{ with .Params.douban_rating }} · {{ . }} 星{{ end }}
-  </p>
+  <div class="meta-line">
+    <span class="chip chip-plain">{{ index $names .Params.douban_kind | default .Params.douban_kind }}</span>
+    {{ with .Params.douban_published_at_raw }}<span> · {{ . }}</span>{{ end }}
+    {{ with .Params.douban_location }}<span> · {{ . }}</span>{{ end }}
+    {{ partial "stars.html" .Params.douban_rating }}
+  </div>
   {{ .Content }}
 {{ end }}
 
 {{/*
-  ── 出处 ────────────────────────────────────────────────────────────────
-  投影是有损的。这两个数是这一层唯一保留的历史痕迹，作用不是展示，
-  而是让人知道「这条还有更多东西，去看 canonical」。
-  把历史整个抹掉的话，页面会显得像是全部真相。
+  ── 出处 ──────────────────────────────────────────────────────────
+  投影是有损的。这两个数是这一层唯一保留的历史痕迹，作用不是展示，而是让人
+  知道「这条还有更多东西，去看 canonical」。把历史整个抹掉的话，页面会显得
+  像是全部真相。
 */}}
-<p class="dim" style="margin-top:2.5rem">
+<p class="dim small" style="margin-top:2.5rem">
   {{ with .Params.douban_revisions }}{{ if gt . 1 }}这条记录有 {{ . }} 个版本 · {{ end }}{{ end }}
   {{ with .Params.douban_last_seen }}最后一次看到是 {{ . }}{{ end }}
-  {{ with .Params.douban_url }}
-    · <a href="{{ . }}" rel="noreferrer">豆瓣原页</a>
-  {{ end }}
+  {{ with .Params.douban_url }} · <a href="{{ . }}" rel="noreferrer noopener" target="_blank">豆瓣原页</a>{{ end }}
 </p>
 
 </article>

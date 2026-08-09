@@ -514,11 +514,34 @@ describe('Hugo 骨架', () => {
   test('骨架本身是完整的', () => {
     // 少一个 baseof.html，Hugo 不会报错，它会**渲染出没有 <html> 的碎片**——
     // 页面能打开、内容也在，只是没有样式没有导航。那种失败最难发现。
-    for (const f of ['hugo.toml', 'layouts/index.html',
+    for (const f of ['hugo.toml', 'layouts/index.html', 'static/site.css',
       'layouts/_default/baseof.html', 'layouts/_default/list.html',
-      'layouts/_default/single.html']) {
+      'layouts/_default/single.html', 'layouts/partials/stars.html',
+      'layouts/partials/pager.html']) {
       assert.ok(existsSync(join(THEME, f)), `骨架缺 ${f}`);
     }
+  });
+
+  test('**样式在 site.css，不内联在模板里**', async () => {
+    // 内联的话改一个间距要翻模板，而每加一块界面就现编一套——与扩展那边
+    // 收敛前是同一个毛病。
+    const base = readFileSync(join(THEME, 'layouts/_default/baseof.html'), 'utf-8');
+    assert.match(base, /href="\/site\.css"/);
+    assert.ok(!/<style>/.test(base), 'baseof 里不该再有内联样式');
+    assert.ok(existsSync(join(THEME, 'static/site.css')));
+  });
+
+  test('**页脚那句「与豆瓣无关」不许删**', () => {
+    // 配色像豆瓣是有意的（这是你自己的豆瓣存档），但长得像和冒充是两回事，
+    // 而这一句就是两者之间的线。
+    const base = readFileSync(join(THEME, 'layouts/_default/baseof.html'), 'utf-8');
+    assert.match(base, /与豆瓣网无关/);
+  });
+
+  test('**没有评分就不画星** —— 五颗空星看起来像打了 0 分', () => {
+    // 实测 37% 的电影标记本来就没有评分，那是真实状态不是缺失。
+    const stars = readFileSync(join(THEME, 'layouts/partials/stars.html'), 'utf-8');
+    assert.match(stars, /\{\{ with \. \}\}/, '要用 with 把「没有评分」整段跳过');
   });
 
   test('**骨架里不许有 content/**', () => {
