@@ -709,6 +709,29 @@ describe('Hugo 骨架', () => {
     assert.match(css, /header\.site \.home a \{ color: inherit/);
   });
 
+  test('**页眉那句站名要把全局 `h1` 设的每一项都盖掉** —— 漏一项就与其余页面不一样', () => {
+    // 首页上它是 `<h1>`，其余页面上是 `<a>`，而全局 `h1 { … }` 只作用于前者。
+    // 盖不全的话，同一句话在首页与作品页上长得不一样——实测漏掉 `line-height`
+    // 与 `letter-spacing` 时，首页页眉里的站名与右边那排导航对不齐。
+    //
+    // 判据是**从 CSS 里读出这两条规则各自设了哪些属性再比对**，不是写死一张清单：
+    // 写死的那种在有人往 `h1 { … }` 里加一项时照样绿。
+    const css = readFileSync(join(THEME, 'static/site.css'), 'utf-8');
+    const props = (re) => {
+      const m = re.exec(css);
+      assert.ok(m, `CSS 里找不到规则 ${re}`);
+      return new Set([...m[1].matchAll(/([a-z-]+)\s*:/g)].map((x) => x[1]));
+    };
+    const h1 = props(/(?:^|\n)h1 \{([^}]*)\}/);
+    const home = props(/(?:^|\n)header\.site \.home \{([^}]*)\}/);
+    const leaked = [...h1].filter((p) => !home.has(p));
+    assert.deepEqual(
+      leaked, [],
+      `全局 h1 设了这些属性而 header.site .home 没有盖住：${leaked.join(', ')}`
+      + '——首页页眉那句站名会因此与其余页面长得不一样',
+    );
+  });
+
   test('**页脚那句「与豆瓣无关」不许删**', () => {
     // 配色像豆瓣是有意的（这是你自己的豆瓣存档），但长得像和冒充是两回事，
     // 而这一句就是两者之间的线。
