@@ -157,6 +157,28 @@ const files = [];
 
 for (const f of files) checkFrontMatter(readFileSync(join(out, 'content', f), 'utf-8'), f);
 
+// ── 链接协议。
+//
+// **生成器自己产出的链接必须是相对路径或 https，绝不能是明文 http。**
+// 一条 http:// 链接在 https 的站点上会被浏览器当作混合内容拦掉或降级，
+// 而它长得和正常链接一模一样——不点开根本看不出来。
+//
+// 用户自己写在短评里的 http:// 不算：那是**他当年写的字**，改掉就是档案在
+// 篡改内容（实测样张里有一条 2015 年的百度网盘链接）。它以纯文本呈现，
+// 不会发起任何请求。所以这里只查我们生成的 Markdown 链接与图片。
+const badLinks = [];
+for (const f of files) {
+  const text = readFileSync(join(out, 'content', f), 'utf-8');
+  // ![](url) 与 [文字](url) —— 生成器产出的那两种
+  for (const m of text.matchAll(/!?\[[^\]]*\]\((http:\/\/[^)]*)\)/g)) badLinks.push([f, m[1]]);
+  // front matter 里的 URL 字段
+  for (const m of text.matchAll(/^douban_\w+: "?(http:\/\/[^"\n]*)"?$/gm)) badLinks.push([f, m[1]]);
+}
+if (badLinks.length) {
+  for (const [f, u] of badLinks.slice(0, 5)) console.error(`  明文 http：${f} → ${u}`);
+  throw new Error(`${badLinks.length} 处生成的链接用了明文 http`);
+}
+
 // 索引也要能被解出来——它是 .js，但内容必须是合法 JSON。
 const idx = readFileSync(join(out, 'static/search-index.js'), 'utf-8');
 const rows = JSON.parse(idx.slice(idx.indexOf('=') + 1, idx.lastIndexOf(';')));
