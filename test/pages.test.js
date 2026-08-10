@@ -744,6 +744,19 @@ describe('Hugo 骨架', () => {
       return m[1];
     };
     assert.match(rule(/a\[href\$="\.html"\] img \{([^}]*)\}/), /float: left/);
+
+    // **封面所在的那个 `<a>` 不许是 inline-block。** 它会自成一个格式化上下文，
+    // 把浮动关在链接内部——封面于是只浮到链接左边，而链接前面还站着「玩过」两个字，
+    // 页面上成了 `玩过 [封面]作品名`，不是 `[封面] 玩过 作品名`。
+    // 同一条规则里的 `line-height: 0` 还会把链接里的作品名压扁。
+    //
+    // 这一条是真踩到的：加封面时改了 Markdown 的形状，却没想到这条早就写好的
+    // 样式会跟着罩上来。float 写对了，看上去却完全没生效。
+    assert.ok(
+      !/\.section-broadcast [^,{]*p a \{/.test(css),
+      'inline-block 那条罩到了封面链接上，浮动会被关在链接里',
+    );
+    assert.match(css, /p a:not\(\[href\$="\.html"\]\) \{[^}]*inline-block/);
     assert.match(rule(/\.section-broadcast \.entry h3 \{([^}]*)\}/), /clear: both/);
     assert.match(
       rule(/\.section-broadcast article,\s*\.section-broadcast \.entry \{([^}]*)\}/),
