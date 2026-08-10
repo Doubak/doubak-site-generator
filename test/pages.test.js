@@ -572,6 +572,38 @@ describe('广播', () => {
     assert.match(text, /!\[\]\(\/uploads\/p1\.jpg\)/);
   });
 
+  test('**没导出成本地的图要报出来** —— 它不是「缺」，它会去豆瓣取', () => {
+    // 这是这份档案唯一会悄悄失去「离线可看」的地方：没导出到本地的图，页面上留的是
+    // doubanio 的原始 URL。保留 URL 本身是对的（至少说明「这儿本来有张图」），
+    // 但代价必须说出来——那一张从此需要豆瓣还活着才看得见。
+    //
+    // 原来 CLI 写的是「页面上会缺」，那句话是错的，而且错得让人以为已经知道后果了。
+    const out = mkdtempSync(join(tmpdir(), 'doubak-remote-'));
+    // 不给 bundlesDir：一张图都导不出来，于是每一张都只能留原始 URL。
+    const r = generate({
+      canonical: {
+        marks: [mark()], subjects: [subject()], longform: [],
+        broadcasts: [bc({ images: ['https://img1.doubanio.com/x/p1.jpg'] })],
+      },
+      outDir: out,
+    });
+    assert.ok(r.images.remote.includes('https://img1.doubanio.com/x.jpg'), '封面该被数进去');
+    assert.ok(r.images.remote.includes('https://img1.doubanio.com/x/p1.jpg'), '广播附图该被数进去');
+    // 去重：同一张图出现在多处只算一次，否则这个数会比真实张数大。
+    assert.equal(r.images.remote.length, new Set(r.images.remote).size);
+  });
+
+  test('图都在档案里时，这个数是 0 —— 判据不能永远为真', () => {
+    const out = mkdtempSync(join(tmpdir(), 'doubak-remote0-'));
+    const r = generate({
+      canonical: {
+        marks: [], subjects: [], longform: [], broadcasts: [],
+      },
+      outDir: out,
+    });
+    assert.deepEqual(r.images.remote, []);
+  });
+
   test('**「看过 X」那一行配一张作品封面** —— 与豆瓣一样', () => {
     const p = project({
       marks: [mark()], subjects: [subject()],

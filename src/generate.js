@@ -90,17 +90,41 @@ export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir
       // 这一条与上面那条是同一个意思：**告警要么是真的，要么就不该出现。**
       // 一条永远在的假告警会让真的那条也被忽略。
       missing: res.missing.filter((u) => !coveredUrls.has(u) && !/\/(cuphead|f)\//.test(u)),
+      // 下面那一轮页面生成时填。
+      remote: [],
     };
   }
 
   // ── 页面
   const files = [];
+
+  /**
+   * 最后仍然指向 doubanio 的图。
+   *
+   * **这是这份档案唯一会悄悄失去「离线可看」的地方。** 没导出到本地的图，页面上
+   * 保留的是原始 URL——那条选择本身是有理由的（留一个 URL 至少说明「这儿本来有
+   * 张图」，比悄悄删掉一张图好），但它的代价必须**说出来**：那一张图从此需要豆瓣
+   * 还活着才看得见，而这个项目存在的全部理由就是不再需要那个前提。
+   *
+   * 原来这件事完全不报。CLI 只说「档案里没有的图 N 张（页面上会缺）」——**而那句
+   * 话是错的**：它们不会缺，它们会去豆瓣取。两种结果的性质差得远，说错了的那句
+   * 反而让人以为已经知道后果了。
+   * @type {string[]}
+   */
+  const remote = [];
+  /** @param {string|null|undefined} url */
+  const stillRemote = (url) => { if (url && !paths[url]) remote.push(url); };
+
   for (const m of p.marks) {
     // 按作品 id 找到的优先——那是档案里真的有的那一张。按 URL 找到的作为退路。
     const cover = coverBySubject[m.subjectId] ?? paths[m.coverUrl] ?? null;
+    if (!cover) stillRemote(m.coverUrl);
     files.push([join('content', markPath(m)), markPage(m, { coverPath: cover })]);
   }
   for (const r of p.longform) {
+    for (const m of (r.body ?? '').matchAll(/https:\/\/[a-z0-9.]*doubanio\.com\/[^\s"'<>)）]+/g)) {
+      stillRemote(m[0]);
+    }
     files.push([join('content', longformPath(r)), longformPage(r, { images: paths })]);
   }
 
@@ -110,6 +134,7 @@ export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir
     const k = monthOf(b);
     if (!byMonth.has(k)) byMonth.set(k, []);
     byMonth.get(k).push(b);
+    for (const u of b.images) stillRemote(u);
   }
   // 作品 id → 本地封面路径。广播里「看过 X」那一行要配一张小封面，与豆瓣一样。
   // **用的是标记页那套同一个查法**（先按作品 id，再按 URL 退一步），不另写一份：
@@ -175,7 +200,7 @@ export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir
     // 而 484 KB 猜成 179 KB 与实际的 266 KB 差着 50%。
     searchGzip: gzipSync(Buffer.from(search.js, 'utf-8')).length,
     theme,
-    images: imageStats,
+    images: { ...imageStats, remote: [...new Set(remote)] },
   };
 }
 

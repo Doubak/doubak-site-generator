@@ -56,8 +56,14 @@ if (r.theme) {
   console.log('   骨架只是个起点——删掉 layouts/ 换任何一个现成主题，content/ 与 static/ 一个字都不用动。');
 }
 
-if (r.images.missing.length) {
-  console.log(`\n档案里没有的图 ${r.images.missing.length} 张（页面上会缺）：`);
-  for (const u of r.images.missing.slice(0, 5)) console.log('  ', u);
-  if (r.images.missing.length > 5) console.log(`   …另有 ${r.images.missing.length - 5} 张`);
+// **这一条不是「顺带提一句」。** 没导出到本地的图，页面上留的是 doubanio 的原始
+// URL——它不会缺，它会去豆瓣取。也就是说这几张图从此需要豆瓣还活着才看得见，
+// 而这个项目存在的全部理由就是不再需要那个前提。
+//
+// 原来这里写的是「页面上会缺」，那句话是错的，而且错得让人以为已经知道后果了。
+if (r.images.remote.length) {
+  console.log(`\n⚠ 有 ${r.images.remote.length} 张图没能从档案里取到，页面上留的是 doubanio 的地址：`);
+  for (const u of r.images.remote.slice(0, 5)) console.log('  ', u);
+  if (r.images.remote.length > 5) console.log(`   …另有 ${r.images.remote.length - 5} 张`);
+  console.log('  这几张要豆瓣还在才看得见。想补齐的话：重新抓一次，然后拿新档案再生成一遍。');
 }
