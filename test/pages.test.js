@@ -470,6 +470,29 @@ describe('按状态筛选', () => {
     assert.equal(mdTitleAttr('反斜杠\\结尾'), '反斜杠\\\\结尾');
   });
 
+  test('**右边那道渐隐只给摆得满的行** —— 不许暗示数据比实际多', () => {
+    // 渐隐的意思是「后面还有」。而舞台剧一共只有 3 部作品——给一行 3 张图也淡出去，
+    // 那是在暗示还有没显示出来的东西，而其实一个都没有。
+    const css = readFileSync(join(THEME_DIR, 'static/site.css'), 'utf-8');
+    assert.match(css, /ul:has\(> li:nth-child\(\d+\)\)[^{]*\{[^}]*mask-image/);
+    assert.ok(
+      !/\.section-home ul \{[^}]*mask-image/.test(css),
+      '渐隐不该无条件加在每一行上',
+    );
+  });
+
+  test('**没有本地封面的作品跳过，不占位** —— 行不会因此断掉', () => {
+    // 上游被删的作品本来就没有封面。塞一张占位图会让「没有」看起来像「有一张空白的」，
+    // 而留一个指向 doubanio 的地址会让一份号称离线可看的档案去联网。
+    const out = mkdtempSync(join(tmpdir(), 'doubak-nocover-'));
+    generate({ canonical: mixed(), outDir: out });
+    const home = readFileSync(join(out, 'content/_index.md'), 'utf-8');
+    // 没有 bundlesDir，一张封面都导不出来——于是一行都不该有，但「看全部」还在。
+    assert.ok(!/^- !\[/m.test(home), '没有本地封面时不该产出封面行');
+    assert.match(home, /\[看全部 2 →\]/);
+    assert.ok(!/doubanio\.com/.test(home), '不许回退到 doubanio 的地址');
+  });
+
   test('**首页小节的顺序与页眉导航同一份**', () => {
     // 两处对不上比顺序不对更难发现：一处改了另一处没改，页面上看着都「有道理」。
     const gen = readFileSync('src/generate.js', 'utf-8');
@@ -756,6 +779,41 @@ describe('广播', () => {
     // **不给链接**：本地没有那一页。也绝不回退到豆瓣 URL——那会让一份号称离线可看
     // 的档案为了一个链接去联网。
     assert.ok(!/douban\.com/.test(text), '不许回退到豆瓣的地址');
+  });
+
+  test('**接不回作品也要显示星数** —— 星与接不接得回来没有关系', () => {
+    // 原来星只写在「接得回本地页」那一支里，于是条目被删的广播连星都不见了。
+    const p = project({
+      marks: [], subjects: [],
+      broadcasts: [bc({ target_id: '9', target_title: '某部被删的片', action: '看过', status: 'done', rating: 4 })],
+    });
+    assert.match(broadcastMonthPage('2026-01', p.broadcasts, {}), /看过 某部被删的片 ★★★★☆/);
+  });
+
+  test('**条目被删但本地还有那一页时，照样给链接**', () => {
+    // 作品名在 canonical 里是 null（「未知作品」是豆瓣的占位符，不进档案），
+    // 但那一页在本地是有的，上面还有用户自己写的短评与评分——链过去比不链有用。
+    // 页面上的说法与作品页自己那一页的标题同源，两处不会长歪。
+    const dead = subject({ id: '7', upstream_deleted: true, revisions: [{
+      parser_version: 'p/1', first_observed_at: 'x', last_observed_at: 'x',
+      fields: { title: null, cover_url: null, raw_meta: null }, digests: {}, observations: [],
+    }] });
+    const m = mark({ subject: { id: '7', url: null, upstream_deleted: true } });
+    const p = project({
+      marks: [m], subjects: [dead],
+      broadcasts: [bc({ target_id: '7', action: '玩过', status: 'done', rating: 4 })],
+    });
+    const text = broadcastMonthPage('2025-07', p.broadcasts, {});
+    assert.match(text, /玩过 \[未知作品\]\(\.\.\/movie\/7\.md\) ★★★★☆/);
+  });
+
+  test('**动作自带冒号时不再多一个空格**', () => {
+    // 「关注榜单：」这类动作自带冒号，加空格就成了「关注榜单： 高分无厘头电影榜」。
+    const p = project({
+      marks: [], subjects: [],
+      broadcasts: [bc({ target_id: '7692', target_title: '高分无厘头电影榜', action: '关注榜单：', status: null })],
+    });
+    assert.match(broadcastMonthPage('2025-07', p.broadcasts, {}), /关注榜单：高分无厘头电影榜/);
   });
 
   test('接得回本地作品页时，以本地那一份为准', () => {

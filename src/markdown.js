@@ -23,6 +23,19 @@ const VERB = {
   drama: { done: '看过', doing: '在看', wish: '想看' },
 };
 
+/**
+ * 上游条目被删时页面上写什么。
+ *
+ * **不是存进档案的名字**——canonical 里那儿是 null，因为「未知作品」是豆瓣的占位符，
+ * 而占位符不是内容。这只是页面上的一个说法，所以作品页与广播行**必须用同一个函数**：
+ * 两处各写一份的话，同一个条目在两个地方会叫两个名字。
+ *
+ * @param {string} medium
+ */
+export function placeholderTitle(medium) {
+  return `未知${medium === 'book' ? '图书' : '作品'}`;
+}
+
 /** @param {string} medium @param {string} status */
 export function verb(medium, status) {
   return VERB[medium]?.[status] ?? status;
@@ -40,7 +53,7 @@ export function markPage(m, { coverPath = null } = {}) {
     //
     // 作品名可能是 null（上游条目被删）。**不拿占位符顶替**，而是如实写成
     // 「未知作品」加上 douban_upstream_deleted=true，让主题自己决定怎么显示。
-    title: m.title ?? `未知${m.medium === 'book' ? '图书' : '作品'}`,
+    title: m.title ?? placeholderTitle(m.medium),
     date: m.markedAt ?? null,
     tags: m.tags ?? [],
 
@@ -297,27 +310,34 @@ export function broadcastBlock(b, { images = {}, covers = {}, linkPrefix = '../'
   // 与那个作品完全断开——而它的 target_id 就在数据里。实测只影响 1 条，
   // 但断开的理由是「代码结构」而不是「数据没有」，那就是个 bug。
   const t = b.target;
-  /** @type {string|null} 「[封面] 玩过 作品名」那一行 */
-  let line = b.action || null;
-  // **接不回本地作品页，也要把名字说出来。**
-  //
-  // 条目被豆瓣删掉之后，标记列表里就没有它了，而这条广播还在——页面上原来只剩
-  // 「想看」两个字后面空着，看起来像抓漏了。而名字一直就在广播的卡片里
-  // （广播发布即冻结，所以那是**那一刻**的名字）。实测 162 条这样的广播，
-  // 其中 104 条是真作品，卡片里都有名字。
-  //
-  // 不给链接：本地没有那一页。**也绝不回退到豆瓣的 URL**——那会让一份号称
-  // 离线可看的档案为了一个链接去联网。
-  if ((!t || !t.title) && b.targetTitle) {
-    line = [b.action, plainText(b.targetTitle)].filter(Boolean).join(' ');
-  }
-  if (t && t.title) {
+
+  /**
+   * 那一刻给的星数。**三种拼法都要带上它**——星与作品接不接得回来没有关系。
+   * 原来它只写在「接得回本地页」那一支里，于是条目被删的广播连星都不见了。
+   */
+  const stars = b.rating ? `${'★'.repeat(b.rating)}${'☆'.repeat(5 - b.rating)}` : null;
+
+  /**
+   * 动作与后面那个名字之间要不要空格。
+   *
+   * 「关注榜单：」这类动作自带一个冒号，再加空格就成了「关注榜单： 高分无厘头电影榜」。
+   */
+  const join = (x, y) => (x && /[：:]$/.test(x) ? `${x}${y}` : [x, y].filter(Boolean).join(' '));
+
+  /** @type {string|null} 「[封面] 玩过 作品名 ★★★★☆」那一行 */
+  let line = [b.action, stars].filter(Boolean).join(' ') || null;
+
+  if (t) {
     const href = `${linkPrefix}${t.medium}/${t.subjectId}.md`;
     // **标题要转义。** 它是豆瓣给的字，而这里正把它塞进 Markdown 的链接文字里。
     // 实测这份档案里 6 个标题带方括号（`Fate/stay night [Heaven's Feel]`）、
     // 5 个带下划线（`SAC_2045`）——今天它们恰好都是平衡的、恰好都在词中间，
     // 所以侥幸没出事。**「恰好没事」不是判据。**
-    const label = plainText(t.title);
+    //
+    // **作品名可能是 null**：条目被豆瓣删了，而占位符「未知作品」不进档案。页面上
+    // 仍然要有个说法，用的是作品页自己那一页的标题（同一个函数），两处不会长歪。
+    // 链接照给——那一页在本地是有的，上面还有用户自己写的短评与评分。
+    const label = plainText(t.title ?? placeholderTitle(t.medium));
     const cover = covers[t.subjectId];
     // **封面必须排在这一行的最前面。**
     //
@@ -334,12 +354,19 @@ export function broadcastBlock(b, { images = {}, covers = {}, linkPrefix = '../'
     // 没有封面就只剩文字，不放占位图：占位符不是内容。
     const parts = [];
     if (cover) parts.push(`[![${label}](${cover})](${href})`);
-    if (b.action) parts.push(b.action);
-    parts.push(`[${label}](${href})`);
-    // 发这条广播时给的星数。它是**那一刻**的分，而作品页上那个是最新的——
-    // 两个数不一样时，不一样本身就是内容。
-    if (b.rating) parts.push(`${'★'.repeat(b.rating)}${'☆'.repeat(5 - b.rating)}`);
-    line = parts.join(' ');
+    parts.push(join(b.action, `[${label}](${href})`));
+    if (stars) parts.push(stars);
+    line = parts.filter(Boolean).join(' ');
+  } else if (b.targetTitle) {
+    // **接不回本地作品页，也要把名字说出来。**
+    //
+    // 条目被豆瓣删掉之后标记列表里就没有它了，而这条广播还在——页面上原来只剩
+    // 「想看」两个字后面空着，看起来像抓漏了。而名字一直就在广播的卡片里
+    // （广播发布即冻结，所以那是**那一刻**的名字）。
+    //
+    // 不给链接：本地没有那一页。**也绝不回退到豆瓣的 URL**——那会让一份号称
+    // 离线可看的档案为了一个链接去联网。
+    line = [join(b.action, plainText(b.targetTitle)), stars].filter(Boolean).join(' ');
   }
   if (line) {
     out.push(line, '');
