@@ -14,6 +14,9 @@ import { fileURLToPath } from 'node:url';
 
 import { generate } from '../src/generate.js';
 
+/** 骨架目录。有几条判据要把生成器与主题里的同一份约定钉在一起。 */
+const THEME_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'theme', 'hugo');
+
 import { project, groupMarks } from '../src/projection.js';
 import {
   markPage, longformPage, markPath, longformPath, verb,
@@ -424,15 +427,56 @@ describe('按状态筛选', () => {
     assert.match(read(markFilterPath('book', 'done')), /douban_count: 1/);
   });
 
-  test('**首页那些数字是链接，且链到文件而不是写死的固定链接**', () => {
+  test('**首页每个状态给一行封面加一个出口**，链到文件不写死固定链接', () => {
     const out = mkdtempSync(join(tmpdir(), 'doubak-filter3-'));
     generate({ canonical: mixed(), outDir: out });
     const home = readFileSync(join(out, 'content/_index.md'), 'utf-8');
-    assert.match(home, /- \[看过 2\]\(movie\/done\/_index\.md\)/);
-    assert.match(home, /- \[读过 1\]\(book\/done\/_index\.md\)/);
+    assert.match(home, /### 看过 2\n/);
+    assert.match(home, /\[看全部 2 →\]\(movie\/done\/_index\.md\)/);
+    assert.match(home, /\[看全部 1 →\]\(book\/done\/_index\.md\)/);
     // 写死 `/movie/done/` 的那种在打开 uglyURLs 之后全断，file:// 下更是
     // 每一条都掉进目录列表里。这条已经栽过一次，见 CLAUDE.md。
-    assert.ok(!/\]\(\//.test(home), '首页链接里出现了绝对路径');
+    // 封面路径是导出到 static 的，以 `/` 开头，属于例外。
+    const links = [...home.matchAll(/\]\(([^)]+)\)/g)].map((m) => m[1]);
+    const bad = links.filter((u) => u.startsWith('/') && !u.startsWith('/covers/') && !u.startsWith('/uploads/'));
+    assert.deepEqual(bad, [], '首页链接里出现了绝对路径');
+  });
+
+  test('**首页小节的顺序与页眉导航同一份**', () => {
+    // 两处对不上比顺序不对更难发现：一处改了另一处没改，页面上看着都「有道理」。
+    const gen = readFileSync('src/generate.js', 'utf-8');
+    const toml = readFileSync(join(THEME_DIR, 'hugo.toml'), 'utf-8');
+    const inGen = /const SECTION_ORDER = \[([^\]]*)\]/.exec(gen)[1]
+      .split(',').map((x) => x.trim().replace(/'/g, '')).filter(Boolean);
+    const inToml = /sectionOrder = \[([^\]]*)\]/.exec(toml)[1]
+      .split(',').map((x) => x.trim().replace(/'/g, '')).filter(Boolean);
+    assert.deepEqual(inGen, inToml);
+    assert.equal(inGen[0], 'broadcast', '广播最不可替代，排第一');
+  });
+
+  test('**状态按 想看 → 在看 → 看过 排**，不按字母序', () => {
+    // 字母序（doing/done/wish）读出来是「在看、看过、想看」——那是把内部标识的
+    // 排序当成了人的顺序。首页与筛选片两处都得是这个次序。
+    const gen = readFileSync('src/generate.js', 'utf-8');
+    assert.match(gen, /const STATUS_ORDER = \['wish', 'doing', 'done'\]/);
+    const chips = readFileSync(join(THEME_DIR, 'layouts/partials/statuschips.html'), 'utf-8');
+    assert.match(chips, /slice "wish" "doing" "done"/);
+  });
+
+  test('**广播与长文在首页也给真的预览**，不只是一个数', () => {
+    const out = mkdtempSync(join(tmpdir(), 'doubak-preview-'));
+    generate({
+      canonical: {
+        marks: [mark()], subjects: [subject()], longform: [],
+        broadcasts: [bc({ text: '这条要出现在首页上' })],
+      },
+      outDir: out,
+    });
+    const home = readFileSync(join(out, 'content/_index.md'), 'utf-8');
+    assert.match(home, /这条要出现在首页上/, '广播预览没出现');
+    assert.match(home, /\[看全部 1 条 →\]\(broadcast\/_index\.md\)/);
+    // 出口要有文件可链——没有这个文件，Markdown 链到的是一个不存在的东西。
+    assert.ok(existsSync(join(out, 'content/broadcast/_index.md')));
   });
 });
 

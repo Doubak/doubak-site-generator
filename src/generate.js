@@ -22,7 +22,8 @@ import { project, groupMarks } from './projection.js';
 import {
   markPage, longformPage, markPath, longformPath, verb,
   broadcastMonthPage, broadcastMonthPath, monthOf,
-  markFilterPath, markFilterPage,
+  markFilterPath, markFilterPage, broadcastBlock, plainText,
+  sectionIndexPath, sectionIndexPage,
 } from './markdown.js';
 import { indexImages, exportImages } from './images.js';
 import { buildSearchIndex } from './search.js';
@@ -31,6 +32,9 @@ import { frontMatter } from './yaml.js';
 /** 媒介的中文名。**唯一的一份**，与扩展那边同源。 */
 const MEDIUM_NAMES = {
   movie: '影视', book: '书', music: '音乐', game: '游戏', drama: '舞台剧',
+  // 首页把广播与长文也当成小节来排，所以这三个名字也在这儿。
+  // 主题那边 `hugo.toml` 的 `[params.mediumNames]` 是同一份，测试钉着两处相等。
+  broadcast: '广播', note: '日记', review: '评论',
 };
 
 /**
@@ -158,7 +162,20 @@ export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir
     }
   }
 
-  files.push(['content/_index.md', homePage(p)]);
+  // 广播 / 日记 / 评论各自的小节页。**首页那句「看全部 →」要有文件可链**——
+  // 没有这个文件时 Hugo 会造一个空小节页，而 Markdown 里链不到一个不存在的文件。
+  for (const [section, has] of [
+    ['broadcast', p.broadcasts.length > 0],
+    ['note', p.longform.some((r) => r.kind === 'note')],
+    ['review', p.longform.some((r) => r.kind === 'review')],
+  ]) {
+    if (has) {
+      files.push([join('content', sectionIndexPath(section)),
+        sectionIndexPage(section, MEDIUM_NAMES[section] ?? section)]);
+    }
+  }
+
+  files.push(['content/_index.md', homePage(p, { covers, previewImages: paths })]);
 
   // ── 搜索索引
   //
@@ -211,47 +228,158 @@ export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir
  * 里，投影这一层没有资格复述一个可能已经过期的结论——那与「coverage 不是完整性
  * 判据」是同一条规则。
  */
-function homePage(p) {
+/**
+ * 首页各小节的顺序。**与页眉导航同一份顺序**（主题那边是 `hugo.toml` 的
+ * `sectionOrder`），两处对不上比顺序不对更难发现。`test/pages.test.js` 钉着它们相等。
+ *
+ * 不按字母序：广播是这份存档里最不可替代的一条（发布即冻结、可被静默删除），排第一；
+ * 日记与评论只有个位数，排后面。
+ */
+const SECTION_ORDER = ['broadcast', 'book', 'movie', 'game', 'music', 'drama', 'note', 'review'];
+
+/**
+ * 标记状态在页面上的先后。
+ *
+ * **想看 → 在看 → 看过**，跟着事情本身的次序走。字母序（doing/done/wish）读出来是
+ * 「在看、看过、想看」，那是把内部标识的排序当成了人的顺序。
+ */
+const STATUS_ORDER = ['wish', 'doing', 'done'];
+
+/** 首页每一行摆几张封面。摆不下的由主题裁掉——一行就是一行。 */
+const STRIP = 10;
+
+/** 广播、日记、评论各给几条预览。 */
+const PREVIEW = 2;
+
+/** 长文预览截多少字。 */
+const EXCERPT = 80;
+
+/**
+ * 首页。
+ *
+ * ## 它是一份概览，不是一张目录
+ *
+ * 原来这里只有一列数字（「读过 45」），点进去才看得到东西。而这份存档的价值恰恰在
+ * 那些封面、那些话——首页一张图都没有的话，它看起来像个后台管理界面。
+ *
+ * 所以每个状态给一行封面加一个「看全部」的出口；广播与长文各给两条真实的预览。
+ *
+ * ## 还是纯 Markdown
+ *
+ * 一行封面就是若干个 `[![标题](封面)](作品页.md)` 排在同一行里——与广播附图同一个
+ * 写法。**版式交给主题**：一行放得下几张、多出来的怎么裁，都是 CSS 的事。
+ * 正文里不塞 HTML（塞了就得开 `unsafe`，那等于让用户文本里的 HTML 在 Pages 上执行）。
+ *
+ * ## 只给数字，不给百分比，也不写「完整」
+ *
+ * 完整性的证据在 bundle 的 `crawl_state` 里，而豆瓣的计数有时算在它的审查层之前、
+ * 有时之后。投影这一层没有资格复述一个可能已经过期的结论。
+ *
+ * @param {object} p 投影
+ * @param {{covers?: Record<string, string>}} [opts] 作品 id → 本地封面路径
+ */
+function homePage(p, { covers = {}, previewImages = {} } = {}) {
   const groups = groupMarks(p.marks);
   const lines = [];
 
-  for (const [medium, byStatus] of [...groups].sort()) {
-    lines.push(`## ${MEDIUM_NAMES[medium] ?? medium}`, '');
-    for (const [status, list] of [...byStatus].sort()) {
+  /**
+   * 一行封面，写成一个 **Markdown 列表**。
+   *
+   * 不写成一段并排的图片：广播预览那一行也是「一个 `<p>` 里有 `<a><img>`」，
+   * 两者在 CSS 里就分不开了——而它们该有的大小差着一倍。列表给了一个纯 Markdown
+   * 的结构区分（`<ul><li>` vs `<p>`），任何 SSG 下都成立，也不用往正文里塞 HTML。
+   *
+   * 没有封面的作品不占位——占位符不是内容。
+   */
+  const strip = (list) => list
+    .filter((m) => covers[m.subjectId])
+    .slice(0, STRIP)
+    .map((m) => `- [![${plainText(m.title ?? '')}](${covers[m.subjectId]})](${markPath(m)})`);
+
+  /** 按想要的顺序排，**名单之外的接在后面**——一个都不许丢。 */
+  const order = (keys, want) => [
+    ...want.filter((k) => keys.includes(k)),
+    ...keys.filter((k) => !want.includes(k)).sort(),
+  ];
+
+  /** 一个媒介：标题 + 每个状态一行封面 + 出口。 */
+  const mediumSection = (medium) => {
+    const byStatus = groups.get(medium);
+    const total = [...byStatus.values()].reduce((n, l) => n + l.length, 0);
+    const out = [`## ${MEDIUM_NAMES[medium] ?? medium} ${total}`, ''];
+    for (const status of order([...byStatus.keys()], STATUS_ORDER)) {
+      const list = byStatus.get(status);
+      out.push(`### ${verb(medium, status)} ${list.length}`, '');
+      const row = strip(list);
+      if (row.length) out.push(...row, '');
       // **链到文件，不写死固定链接。** 与正文里的作品交叉链接同一条规则：
       // 生成器只说「那份内容在这个文件里」，最终 URL 由 SSG 决定——第一版写死
       // `/movie/123/` 的那次，打开 uglyURLs 就全断了。
-      lines.push(`- [${verb(medium, status)} ${list.length}](${markFilterPath(medium, status)})`);
+      out.push(`[看全部 ${list.length} →](${markFilterPath(medium, status)})`, '');
     }
-    lines.push('');
-  }
+    return out;
+  };
 
-  const withText = p.broadcasts.filter((b) => b.text).length;
-  if (p.broadcasts.length) {
-    lines.push(
-      '## 广播', '',
-      `- 共 ${p.broadcasts.length} 条，其中 ${withText} 条带正文`,
-      // **广播发布即冻结。** 这不是一句介绍，是这份档案里唯一能证明
-      // 「首次抓取之前发生过编辑」的东西——标记页上的短评会被后来的编辑覆盖。
-      '- 广播发布后不可编辑，所以每条都是那一刻的原话',
+  /** 广播：两条真实的预览。只写「共 3401 条」等于把这份档案最值钱的东西藏起来。 */
+  const broadcastSection = () => {
+    const recent = [...p.broadcasts]
+      .sort((a, b) => ((a.postedAt ?? '') < (b.postedAt ?? '') ? 1 : -1))
+      .slice(0, PREVIEW);
+    const withText = p.broadcasts.filter((b) => b.text).length;
+    return [
+      `## ${MEDIUM_NAMES.broadcast} ${p.broadcasts.length}`, '',
+      `其中 ${withText} 条带正文。广播发布后不可编辑，所以每条都是那一刻的原话。`, '',
+      // **首页就在根上，前缀是空**；月页在 broadcast/ 底下才要 `../`。
+      ...recent.map((b) => broadcastBlock(b, { images: previewImages, covers, linkPrefix: '' })),
       '',
-    );
-  }
+      `[看全部 ${p.broadcasts.length} 条 →](${sectionIndexPath('broadcast')})`, '',
+    ];
+  };
 
-  const notes = p.longform.filter((r) => r.kind === 'note').length;
-  const reviews = p.longform.filter((r) => r.kind === 'review').length;
-  if (notes || reviews) {
-    lines.push('## 长文', '', `- 日记 ${notes}`, `- 评论 ${reviews}`, '');
+  /** 日记 / 评论：两篇预览，正文只给开头。 */
+  const longformSection = (kind) => {
+    const list = p.longform.filter((r) => r.kind === kind);
+    const recent = [...list]
+      .sort((a, b) => ((a.publishedAt ?? '') < (b.publishedAt ?? '') ? 1 : -1))
+      .slice(0, PREVIEW);
+    const out = [`## ${MEDIUM_NAMES[kind]} ${list.length}`, ''];
+    for (const r of recent) {
+      out.push(`### [${plainText(r.title ?? '(无标题)')}](${longformPath(r)})`, '');
+      const when = r.publishedAtRaw ?? (r.publishedAt ?? '').slice(0, 10);
+      if (when) out.push(`*${when}*`, '');
+      // 正文只给开头一小段，**并且把截断说出来**。不说的话读者无从分辨这是全文还是
+      // 摘要——而「半截当全文」在这份档案里是明令禁止的（见广播的 text_truncated）。
+      // 图片标记去掉，空白压成一个空格：摘要是一段话，不是一小块排版。
+      const flat = (r.body ?? '').replace(/!\[\]\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+      const chars = [...flat];
+      if (chars.length) {
+        out.push(plainText(chars.slice(0, EXCERPT).join('')) + (chars.length > EXCERPT ? '……' : ''), '');
+      }
+    }
+    out.push(`[看全部 ${list.length} 篇 →](${sectionIndexPath(kind)})`, '');
+    return out;
+  };
+
+  // **所有小节排在同一个顺序里**，不是「先媒介、再把广播长文接在后面」——
+  // 那样广播永远垫底，而它恰恰是这份档案里最不可替代的一条。
+  const present = [
+    ...(p.broadcasts.length ? ['broadcast'] : []),
+    ...groups.keys(),
+    ...(p.longform.some((r) => r.kind === 'note') ? ['note'] : []),
+    ...(p.longform.some((r) => r.kind === 'review') ? ['review'] : []),
+  ];
+  for (const section of order(present, SECTION_ORDER)) {
+    if (section === 'broadcast') lines.push(...broadcastSection());
+    else if (section === 'note' || section === 'review') lines.push(...longformSection(section));
+    else lines.push(...mediumSection(section));
   }
 
   const deleted = p.marks.filter((m) => m.upstreamDeleted).length;
   if (deleted) {
     lines.push(
-      '## 上游已删除',
-      '',
+      '## 上游已删除', '',
       `有 ${deleted} 条标记指向豆瓣已经删掉的作品。标记本身还在——评分、标签、`
-      + '短评都是你自己写的，它们没有跟着消失。',
-      '',
+      + '短评都是你自己写的，它们没有跟着消失。', '',
     );
   }
 

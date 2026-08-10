@@ -23,9 +23,10 @@
        href="{{ $section.RelPermalink }}"
        {{ if not $current }}aria-current="page"{{ end }}>全部
       <b>{{ len $section.RegularPages }}</b></a>
-    {{/* 顺序按状态本身固定成 看过/在看/想看，不按字母序——`doing/done/wish`
-         的字母序读起来是「在看、看过、想看」，而人想的是「看过」在最前。 */}}
-    {{ range $s := slice "done" "doing" "wish" }}
+    {{/* **想看 → 在看 → 看过**，跟着事情本身的次序走，与首页一致。
+         字母序（`doing/done/wish`）读出来是「在看、看过、想看」——那是把内部标识
+         的排序当成了人的顺序。两处顺序不一样比顺序不对更难发现。 */}}
+    {{ range $s := slice "wish" "doing" "done" }}
       {{ range where $filters "Params.douban_status" "eq" $s }}
         {{ $on := eq $current $s }}
         <a class="chip{{ if $on }} chip-on{{ end }}"

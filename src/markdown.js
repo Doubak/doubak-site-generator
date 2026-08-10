@@ -265,6 +265,105 @@ export function longformPath(r) {
 }
 
 /**
+ * 一条广播渲染成一段 Markdown：时间、`[封面] 动作 作品名 ★★★★☆`、正文、附图。
+ *
+ * **月页与首页预览共用这一个**。两处各写一份的话迟早会长歪——而歪掉的样子是
+ * 「首页上的广播和点进去看到的不一样」，那正是最不该发生在一份存档上的事。
+ *
+ * @param {object} b 投影后的广播
+ * @param {{images?: Record<string, string>, covers?: Record<string, string>, linkPrefix?: string}} [opts]
+ *   `linkPrefix` 是到作品页的相对前缀：月页在 `broadcast/` 底下，要退一级（`../`）；
+ *   首页就在根上，前缀是空。**两处都显式传**——默认值对一处是对的、对另一处就是
+ *   一整页的死链，而死链在 file:// 下打开是一个目录列表，看起来还挺正常。
+ * @returns {string}
+ */
+export function broadcastBlock(b, { images = {}, covers = {}, linkPrefix = '../' } = {}) {
+  const out = [`### ${b.postedAtRaw ?? b.postedAt ?? '时间未知'}`, ''];
+
+  // 动作那一行：「想看 《某电影》」。接得回本地作品页就接，接不回来就只留文字
+  // ——**不回退到豆瓣的 URL**，那会让一份号称离线可看的档案去联网。
+  //
+  // 链接指向**那个 .md 文件的相对路径**，不是某种 URL。
+  //
+  // 第一版写的是 `/movie/123/`，也就是把一种固定链接方案硬编码进了 Markdown
+  // 里——而那个方案是 SSG 的，不是我们的。实测的后果：Hugo 开了 uglyURLs 之后
+  // 页面是 `movie/123.html`，那些链接全部指向不存在的目录；在 file:// 下更糟，
+  // 浏览器会显示一个目录列表。
+  //
+  // 相对文件路径没有这个问题：它说的是「那份文件在这儿」，由 SSG 自己去决定
+  // 它最终的 URL 长什么样（Hugo 的 link render hook 会把 `.md` 换成实际后缀）。
+  // **动作可以没有，链接不该跟着没有。** 第一版把作品链接挂在 `if (b.action)`
+  // 里面，于是一条没有动作词、却明确指着某个作品的广播（转发、纯发言）在页面上
+  // 与那个作品完全断开——而它的 target_id 就在数据里。实测只影响 1 条，
+  // 但断开的理由是「代码结构」而不是「数据没有」，那就是个 bug。
+  const t = b.target;
+  /** @type {string|null} 「[封面] 玩过 作品名」那一行 */
+  let line = b.action || null;
+  if (t && t.title) {
+    const href = `${linkPrefix}${t.medium}/${t.subjectId}.md`;
+    // **标题要转义。** 它是豆瓣给的字，而这里正把它塞进 Markdown 的链接文字里。
+    // 实测这份档案里 6 个标题带方括号（`Fate/stay night [Heaven's Feel]`）、
+    // 5 个带下划线（`SAC_2045`）——今天它们恰好都是平衡的、恰好都在词中间，
+    // 所以侥幸没出事。**「恰好没事」不是判据。**
+    const label = plainText(t.title);
+    const cover = covers[t.subjectId];
+    // **封面必须排在这一行的最前面。**
+    //
+    // 主题让它 `float: left`，而浮动**跳不到同一行里排在它前面的文字前面**去：
+    // 写成「玩过 [封面]作品名」的话，页面上就真的是那个样子——封面卡在动作词与
+    // 作品名之间。CSS 那边怎么调都没用，顺序得在这里定。
+    //
+    // 这也是为什么封面自己一个链接、标题另一个：要让封面排在最前，同时又不能
+    // 把「玩过」两个字吞进链接里（那是动作，不是作品名的一部分）。两个相邻的
+    // 同目标链接对读屏器略有重复，所以封面的 alt 用作品名——图片链接必须有个
+    // 说得出口的名字，alt 留空会让它变成一个念不出名字的链接。
+    //
+    // 封面来自档案里已经存下的那张（`static/covers/`），不是去豆瓣现取的。
+    // 没有封面就只剩文字，不放占位图：占位符不是内容。
+    const parts = [];
+    if (cover) parts.push(`[![${label}](${cover})](${href})`);
+    if (b.action) parts.push(b.action);
+    parts.push(`[${label}](${href})`);
+    // 发这条广播时给的星数。它是**那一刻**的分，而作品页上那个是最新的——
+    // 两个数不一样时，不一样本身就是内容。
+    if (b.rating) parts.push(`${'★'.repeat(b.rating)}${'☆'.repeat(5 - b.rating)}`);
+    line = parts.join(' ');
+  }
+  if (line) {
+    out.push(line, '');
+  }
+
+  if (b.text) out.push(plainText(b.text), '');
+  // **被截断就说出来。** 显示半截正文而不声明，站点就在替档案说假话。
+  // 接得回本地长文页就给个链接（同样用 .md 相对路径，不硬编码 URL 方案）；
+  // 接不上就只说被截断了——不回退到豆瓣。
+  if (b.textTruncated) {
+    out.push(b.fullText
+      ? `*（豆瓣在这里截断了，[全文在这篇${b.fullText.kind === 'review' ? '评论' : '日记'}里](${linkPrefix}${b.fullText.kind}/${b.fullText.id}.md)）*`
+      : '*（豆瓣在这里截断了，全文不在档案里）*', '');
+  }
+  if (b.images.length) {
+    // **一条广播的附图写在同一行里，不是一张一段。**
+    //
+    // 一张一段的话每张图各占一个 `<p>`，在页面上就是一列铺满宽度的大图——
+    // 实测这份档案里一条广播最多带 18 张，那是十八屏。写在同一行则渲染成一个
+    // `<p>` 里的若干 `<img>`，主题给它们一个高度上限就自动排成会换行的一排。
+    //
+    // 每张都链到自己：缩略之后要能点开看原图。这仍然是**纯 Markdown**，
+    // 换任何一个 SSG 都成立——版式交给主题，不往正文里塞 HTML
+    // （塞了就得开 unsafe，而那等于让用户文本里的 HTML 在 GitHub Pages 上执行）。
+    //
+    // 没导出的图保持原样：留一个指向 doubanio 的 URL，总比悄悄删掉一张图好
+    // ——前者至少说明「这儿本来有图」。
+    out.push(b.images.map((url) => {
+      const p = images[url] ?? url;
+      return `[![](${p})](${p})`;
+    }).join(' '), '');
+  }
+  return out.join('\n');
+}
+
+/**
  * 广播按月归档，一个月一页。
  *
  * ## 为什么不是一条一页
@@ -302,91 +401,8 @@ export function broadcastMonthPage(month, list, { images = {}, covers = {} } = {
     douban_images: sorted.reduce((n, b) => n + b.images.length, 0),
   };
 
-  const blocks = sorted.map((b) => {
-    const out = [`### ${b.postedAtRaw ?? b.postedAt ?? '时间未知'}`, ''];
-
-    // 动作那一行：「想看 《某电影》」。接得回本地作品页就接，接不回来就只留文字
-    // ——**不回退到豆瓣的 URL**，那会让一份号称离线可看的档案去联网。
-    //
-    // 链接指向**那个 .md 文件的相对路径**，不是某种 URL。
-    //
-    // 第一版写的是 `/movie/123/`，也就是把一种固定链接方案硬编码进了 Markdown
-    // 里——而那个方案是 SSG 的，不是我们的。实测的后果：Hugo 开了 uglyURLs 之后
-    // 页面是 `movie/123.html`，那些链接全部指向不存在的目录；在 file:// 下更糟，
-    // 浏览器会显示一个目录列表。
-    //
-    // 相对文件路径没有这个问题：它说的是「那份文件在这儿」，由 SSG 自己去决定
-    // 它最终的 URL 长什么样（Hugo 的 link render hook 会把 `.md` 换成实际后缀）。
-    // **动作可以没有，链接不该跟着没有。** 第一版把作品链接挂在 `if (b.action)`
-    // 里面，于是一条没有动作词、却明确指着某个作品的广播（转发、纯发言）在页面上
-    // 与那个作品完全断开——而它的 target_id 就在数据里。实测只影响 1 条，
-    // 但断开的理由是「代码结构」而不是「数据没有」，那就是个 bug。
-    const t = b.target;
-    /** @type {string|null} 「[封面] 玩过 作品名」那一行 */
-    let line = b.action || null;
-    if (t && t.title) {
-      const href = `../${t.medium}/${t.subjectId}.md`;
-      // **标题要转义。** 它是豆瓣给的字，而这里正把它塞进 Markdown 的链接文字里。
-      // 实测这份档案里 6 个标题带方括号（`Fate/stay night [Heaven's Feel]`）、
-      // 5 个带下划线（`SAC_2045`）——今天它们恰好都是平衡的、恰好都在词中间，
-      // 所以侥幸没出事。**「恰好没事」不是判据。**
-      const label = plainText(t.title);
-      const cover = covers[t.subjectId];
-      // **封面必须排在这一行的最前面。**
-      //
-      // 主题让它 `float: left`，而浮动**跳不到同一行里排在它前面的文字前面**去：
-      // 写成「玩过 [封面]作品名」的话，页面上就真的是那个样子——封面卡在动作词与
-      // 作品名之间。CSS 那边怎么调都没用，顺序得在这里定。
-      //
-      // 这也是为什么封面自己一个链接、标题另一个：要让封面排在最前，同时又不能
-      // 把「玩过」两个字吞进链接里（那是动作，不是作品名的一部分）。两个相邻的
-      // 同目标链接对读屏器略有重复，所以封面的 alt 用作品名——图片链接必须有个
-      // 说得出口的名字，alt 留空会让它变成一个念不出名字的链接。
-      //
-      // 封面来自档案里已经存下的那张（`static/covers/`），不是去豆瓣现取的。
-      // 没有封面就只剩文字，不放占位图：占位符不是内容。
-      const parts = [];
-      if (cover) parts.push(`[![${label}](${cover})](${href})`);
-      if (b.action) parts.push(b.action);
-      parts.push(`[${label}](${href})`);
-      // 发这条广播时给的星数。它是**那一刻**的分，而作品页上那个是最新的——
-      // 两个数不一样时，不一样本身就是内容。
-      if (b.rating) parts.push(`${'★'.repeat(b.rating)}${'☆'.repeat(5 - b.rating)}`);
-      line = parts.join(' ');
-    }
-    if (line) {
-      out.push(line, '');
-    }
-
-    if (b.text) out.push(plainText(b.text), '');
-    // **被截断就说出来。** 显示半截正文而不声明，站点就在替档案说假话。
-    // 接得回本地长文页就给个链接（同样用 .md 相对路径，不硬编码 URL 方案）；
-    // 接不上就只说被截断了——不回退到豆瓣。
-    if (b.textTruncated) {
-      out.push(b.fullText
-        ? `*（豆瓣在这里截断了，[全文在这篇${b.fullText.kind === 'review' ? '评论' : '日记'}里](../${b.fullText.kind}/${b.fullText.id}.md)）*`
-        : '*（豆瓣在这里截断了，全文不在档案里）*', '');
-    }
-    if (b.images.length) {
-      // **一条广播的附图写在同一行里，不是一张一段。**
-      //
-      // 一张一段的话每张图各占一个 `<p>`，在页面上就是一列铺满宽度的大图——
-      // 实测这份档案里一条广播最多带 18 张，那是十八屏。写在同一行则渲染成一个
-      // `<p>` 里的若干 `<img>`，主题给它们一个高度上限就自动排成会换行的一排。
-      //
-      // 每张都链到自己：缩略之后要能点开看原图。这仍然是**纯 Markdown**，
-      // 换任何一个 SSG 都成立——版式交给主题，不往正文里塞 HTML
-      // （塞了就得开 unsafe，而那等于让用户文本里的 HTML 在 GitHub Pages 上执行）。
-      //
-      // 没导出的图保持原样：留一个指向 doubanio 的 URL，总比悄悄删掉一张图好
-      // ——前者至少说明「这儿本来有图」。
-      out.push(b.images.map((url) => {
-        const p = images[url] ?? url;
-        return `[![](${p})](${p})`;
-      }).join(' '), '');
-    }
-    return out.join('\n');
-  });
+  // 月页在 `broadcast/` 底下，到作品页要退一级。
+  const blocks = sorted.map((b) => broadcastBlock(b, { images, covers, linkPrefix: '../' }));
 
   return frontMatter(fm) + '\n' + blocks.join('\n');
 }
@@ -482,4 +498,25 @@ export function plainText(s, { preserveListMarkers = false } = {}) {
       // `\1.` 会原样渲染成一个反斜杠加 1 —— 实测确认过。
       .replace(/^(\s*)(\d+)([.)])(\s|$)/, '$1$2\\$3$4'))
     .join('\n');
+}
+
+/**
+ * 小节自己的 `_index.md`。
+ *
+ * 广播、日记、评论这几节原来没有这个文件——Hugo 会替它们造一个空的小节页，
+ * 于是首页那句「看全部 →」**没有文件可链**。而这个项目的规矩是链到文件、
+ * 由 SSG 决定最终 URL，所以文件得真的存在。
+ *
+ * 正文留空：那一页要显示什么由主题决定，这里只负责给它一个名字和一个落点。
+ *
+ * @param {string} section
+ * @param {string} title
+ */
+export function sectionIndexPage(section, title) {
+  return frontMatter({ title, douban_kind: 'section', douban_section: section });
+}
+
+/** @param {string} section */
+export function sectionIndexPath(section) {
+  return `${section}/_index.md`;
 }
