@@ -730,6 +730,42 @@ describe('Hugo 骨架', () => {
     assert.ok(!/^article img \{[^}]*max-height/m.test(css), '这会把日记的插图也缩了');
   });
 
+  test('**封面浮到左边，时间戳要清浮动，块要收住浮动**', () => {
+    // 封面浮左，动作 / 作品名 / 正文就自然流在它右边——豆瓣的广播就是这个形状，
+    // 而且一个字的 Markdown 都不用改（用 flex 就得给它们一个共同父元素，
+    // 那意味着往正文里塞 HTML，也就意味着 unsafe = true）。
+    //
+    // 但浮动要收：`h3` 不清的话下一条的时间戳会挤到上一条封面旁边；容器不收的话
+    // 最后一条的封面会漏到月份边界外面。两条都是「不写就错、写了看不出」的东西。
+    const css = readFileSync(join(THEME, 'static/site.css'), 'utf-8');
+    const rule = (re) => {
+      const m = re.exec(css);
+      assert.ok(m, `CSS 里找不到 ${re}`);
+      return m[1];
+    };
+    assert.match(rule(/a\[href\$="\.html"\] img \{([^}]*)\}/), /float: left/);
+    assert.match(rule(/\.section-broadcast \.entry h3 \{([^}]*)\}/), /clear: both/);
+    assert.match(
+      rule(/\.section-broadcast article,\s*\.section-broadcast \.entry \{([^}]*)\}/),
+      /display: flow-root/,
+    );
+  });
+
+  test('**月与月的分隔要比条与条的更重** —— 层级得看得出来', () => {
+    // 原来两者都是同一根 1px 细线：一页 4 个月、上百条广播，读下来分不出自己走到
+    // 哪个月了。判据不是「有这条规则」，而是**两者的粗细真的不一样**——
+    // 光有规则的话，有人把两处调成一样粗，测试照样绿。
+    const css = readFileSync(join(THEME, 'static/site.css'), 'utf-8');
+    const px = (re) => {
+      const m = re.exec(css);
+      assert.ok(m, `CSS 里找不到 ${re}`);
+      return Number(/border-top:\s*(\d+)px/.exec(m[1])?.[1] ?? NaN);
+    };
+    const month = px(/\.section-broadcast \.entry \{([^}]*)\}/);
+    const item = px(/\.section-broadcast \.entry h3 \{([^}]*)\}/);
+    assert.ok(month > item, `月分隔 ${month}px 不比条分隔 ${item}px 重`);
+  });
+
   test('**封面与附图靠「链接指向哪儿」区分，而且不许被 :only-child 那条盖掉**', () => {
     // 两者在 HTML 里都是 `<p>` 里的 `<a><img>`，该有的大小差着一个数量级：
     // 封面 2.6em 贴在一行字旁边，附图 9rem 排成一排。判据是附图链到图片自己
