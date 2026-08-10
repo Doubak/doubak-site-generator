@@ -1015,6 +1015,20 @@ describe('Hugo 骨架', () => {
     }
   });
 
+  test('**`.section-*` 后面不许再跟 `main`** —— 那是在找 main 里面的 main', () => {
+    // `section-home` / `section-broadcast` 这些类挂在 `<main>` 自己身上
+    // （`<main class="section-{{ .Section }}">`），所以 `.section-home main ul`
+    // 要求的是「main 里面还有一个 main」——永远匹配不上。
+    //
+    // **而 CSS 匹配不上不会报错**：整段样式静悄悄地不生效，页面照常渲染，只是长得
+    // 完全不对。实测就是这么发生的：首页那 105 张封面全部按原图大小铺下来，
+    // 一行一张，而所有测试都是绿的。
+    const css = readFileSync(join(THEME_DIR, 'static/site.css'), 'utf-8')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ');
+    const dead = [...css.matchAll(/\.section-[\w-]+\s+main\b[^{,]*/g)].map((m) => m[0].trim());
+    assert.deepEqual(dead, [], '这些选择器永远匹配不上');
+  });
+
   test('**页脚那句「与豆瓣无关」不许删**', () => {
     // 配色像豆瓣是有意的（这是你自己的豆瓣存档），但长得像和冒充是两回事，
     // 而这一句就是两者之间的线。
