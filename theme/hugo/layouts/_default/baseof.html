@@ -38,7 +38,7 @@
     <a class="home" href="{{ .Site.Home.RelPermalink }}">{{ .Site.Title }}</a>
   {{ end }}
   <nav>
-    {{ range .Site.Sections.ByTitle }}
+    {{ range partial "sections.html" . }}
       <a href="{{ .RelPermalink }}"{{ if eq $.Section .Section }} aria-current="page"{{ end }}>{{ index $names .Section | default .Title }}</a>
     {{ end }}
     {{ with .Site.GetPage "/search" }}<a href="{{ .RelPermalink }}">搜索</a>{{ end }}

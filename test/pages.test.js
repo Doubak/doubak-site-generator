@@ -612,9 +612,15 @@ describe('广播', () => {
     const text = broadcastMonthPage('2021-11', p.broadcasts, {
       covers: { 36838707: '/covers/x.jpg' },
     });
-    // **图与标题共用一个 `<a>`。** 两个指向同一处的相邻链接对读屏器是重复的；
-    // 而 alt 留空是因为标题就在旁边——那张图在这里是装饰，不是信息。
-    assert.match(text, /\[!\[\]\(\/covers\/x\.jpg\)某部电影\]\(\.\.\/movie\/36838707\.md\)/);
+    // **封面必须排在这一行的最前面。** 主题让它 float: left，而浮动跳不到同一行里
+    // 排在它前面的文字前面去——写成「看过 [封面]作品名」的话，页面上就真的是那个
+    // 样子，封面卡在动作词与作品名之间。CSS 那边怎么调都没用，顺序得在这儿定。
+    assert.match(
+      text,
+      /\[!\[某部电影\]\(\/covers\/x\.jpg\)\]\(\.\.\/movie\/36838707\.md\) 看过 \[某部电影\]\(\.\.\/movie\/36838707\.md\)/,
+    );
+    // 图片链接必须有个说得出口的名字：alt 留空会让它变成一个念不出名字的链接。
+    assert.ok(!/!\[\]\(\/covers/.test(text), '封面的 alt 不许是空的');
   });
 
   test('没有封面就只剩文字链接 —— **不放占位图**', () => {
@@ -893,6 +899,31 @@ describe('Hugo 骨架', () => {
     assert.match(p, /sort \(uniq \$variants\)/, '排序取第一个 —— 稳定且不发明写法');
     assert.ok(!/humanize|title\b|upper/.test(p.replace(/\{\{-? ?\/\*[\s\S]*?\*\/ ?-?\}\}/g, '')),
       '不许首字母大写 / 全大写 —— 那是替用户规范化他的标签');
+  });
+
+  test('**导航顺序是写死的，但名单之外的小节一个都不许丢**', () => {
+    // 顺序不按字母序——字母序是「没有想过顺序」的意思，而广播是这份存档里最不可
+    // 替代的一条（发布即冻结、可被静默删除），该排第一。
+    //
+    // 但一张写死的清单如果能让新加的小节从导航上消失，那它迟早会消失掉什么，
+    // 而那种失踪没有任何提示。所以 partial 里必须有「把名单外的接在后面」那一段。
+    const toml = readFileSync(join(THEME, 'hugo.toml'), 'utf-8');
+    const m = /sectionOrder = \[([^\]]*)\]/.exec(toml);
+    assert.ok(m, 'hugo.toml 里该有 sectionOrder');
+    const order = m[1].split(',').map((x) => x.trim().replace(/'/g, ''));
+    assert.deepEqual(order,
+      ['broadcast', 'book', 'movie', 'game', 'music', 'drama', 'note', 'review']);
+
+    const p = readFileSync(join(THEME, 'layouts/partials/sections.html'), 'utf-8');
+    assert.match(p, /if not \(in \$want \.Section\)/, '名单之外的小节要接在后面，不能丢');
+
+    // 两处都得用它：页眉导航与首页那条浏览条。少一处就会与另一处对不上，
+    // 而「同一份东西在两个地方顺序不一样」比顺序不对更难发现。
+    for (const f of ['layouts/_default/baseof.html', 'layouts/index.html']) {
+      const t = readFileSync(join(THEME, f), 'utf-8');
+      assert.match(t, /partial "sections\.html"/, `${f} 该用排好序的那份`);
+      assert.ok(!/\.Site\.Sections\.ByTitle/.test(t), `${f} 还在用字母序`);
+    }
   });
 
   test('**页脚那句「与豆瓣无关」不许删**', () => {

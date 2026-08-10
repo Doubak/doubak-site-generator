@@ -55,6 +55,16 @@ disableKinds = ['rss', 'sitemap']
   unsafe = false
 
 [params]
+  # 导航与首页「浏览」那一行的顺序。
+  #
+  # **不按字母序。** 字母序是「没有想过顺序」的意思，而这份存档里各部分的分量差得很远：
+  # 广播是最不可替代的一条（发布即冻结、可被静默删除），该排第一；日记与评论只有个位数，
+  # 排在后面。
+  #
+  # 名单之外的小节**不会被丢掉**，会按字母序接在后面（见 baseof.html）——
+  # 一张写死的清单如果能让新加的小节从导航上消失，那它迟早会。
+  sectionOrder = ['broadcast', 'book', 'movie', 'game', 'music', 'drama', 'note', 'review']
+
   # 媒介的中文名。豆瓣的动词跟着媒介走，「看过一本书」是错的说法。
   [params.mediumNames]
     movie = '影视'

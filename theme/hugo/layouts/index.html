@@ -14,7 +14,7 @@
   但屏幕阅读器需要，所以给 nav 一个 aria-label。
 */}}
 <nav class="summary browse" aria-label="浏览">
-  {{ range .Site.Sections.ByTitle }}
+  {{ range partial "sections.html" . }}
     <span><a href="{{ .RelPermalink }}">{{ index $names .Section | default .Title }}</a> <b>{{ len .RegularPages }}</b></span>
   {{ end }}
   {{ with .Site.GetPage "/search" }}<span><a href="{{ .RelPermalink }}">搜索</a></span>{{ end }}

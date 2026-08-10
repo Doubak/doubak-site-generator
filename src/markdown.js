@@ -316,25 +316,37 @@ export function broadcastMonthPage(month, list, { images = {}, covers = {} } = {
     // 与那个作品完全断开——而它的 target_id 就在数据里。实测只影响 1 条，
     // 但断开的理由是「代码结构」而不是「数据没有」，那就是个 bug。
     const t = b.target;
-    let link = null;
+    /** @type {string|null} 「[封面] 玩过 作品名」那一行 */
+    let line = b.action || null;
     if (t && t.title) {
-      // **封面放进同一个链接里，不另起一个。** 豆瓣的广播就是一张小封面加一行字，
-      // 长得眼熟本身就是功能。但两个指向同一处的相邻链接对读屏器是重复的，
-      // 所以图与标题共用一个 `<a>`，图的 alt 留空——标题就在旁边，
-      // 那张图在这里是装饰，不是信息。
-      //
-      // 封面来自档案里已经存下的那张（`static/covers/`），不是去豆瓣现取的。
-      // 没有封面就只剩文字链接，不放占位图：占位符不是内容。
-      const cover = covers[t.subjectId];
+      const href = `../${t.medium}/${t.subjectId}.md`;
       // **标题要转义。** 它是豆瓣给的字，而这里正把它塞进 Markdown 的链接文字里。
       // 实测这份档案里 6 个标题带方括号（`Fate/stay night [Heaven's Feel]`）、
       // 5 个带下划线（`SAC_2045`）——今天它们恰好都是平衡的、恰好都在词中间，
       // 所以侥幸没出事。**「恰好没事」不是判据。**
       const label = plainText(t.title);
-      link = `[${cover ? `![](${cover})` : ''}${label}](../${t.medium}/${t.subjectId}.md)`;
+      const cover = covers[t.subjectId];
+      // **封面必须排在这一行的最前面。**
+      //
+      // 主题让它 `float: left`，而浮动**跳不到同一行里排在它前面的文字前面**去：
+      // 写成「玩过 [封面]作品名」的话，页面上就真的是那个样子——封面卡在动作词与
+      // 作品名之间。CSS 那边怎么调都没用，顺序得在这里定。
+      //
+      // 这也是为什么封面自己一个链接、标题另一个：要让封面排在最前，同时又不能
+      // 把「玩过」两个字吞进链接里（那是动作，不是作品名的一部分）。两个相邻的
+      // 同目标链接对读屏器略有重复，所以封面的 alt 用作品名——图片链接必须有个
+      // 说得出口的名字，alt 留空会让它变成一个念不出名字的链接。
+      //
+      // 封面来自档案里已经存下的那张（`static/covers/`），不是去豆瓣现取的。
+      // 没有封面就只剩文字，不放占位图：占位符不是内容。
+      const parts = [];
+      if (cover) parts.push(`[![${label}](${cover})](${href})`);
+      if (b.action) parts.push(b.action);
+      parts.push(`[${label}](${href})`);
+      line = parts.join(' ');
     }
-    if (b.action || link) {
-      out.push([b.action, link].filter(Boolean).join(' '), '');
+    if (line) {
+      out.push(line, '');
     }
 
     if (b.text) out.push(plainText(b.text), '');
