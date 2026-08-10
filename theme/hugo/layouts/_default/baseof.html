@@ -6,6 +6,8 @@
 {{ $names := .Site.Params.mediumnames }}
 {{ $name := .Title }}
 {{ if .IsSection }}{{ $name = index $names .Section | default .Title }}{{ end }}
+{{/* 标签页的标题要**稳定**：Hugo 自己取的那个随页面遍历顺序变。见 partials/termname.html。 */}}
+{{ if eq .Kind "term" }}{{ $name = partial "termname.html" . }}{{ end }}
 <title>{{ if .IsHome }}{{ .Site.Title }}{{ else }}{{ $name }} · {{ .Site.Title }}{{ end }}</title>
 {{/*
   样式在 static/site.css，不再内联。理由与扩展那边收敛前一样：内联的话，

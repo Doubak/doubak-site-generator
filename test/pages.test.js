@@ -732,6 +732,29 @@ describe('Hugo 骨架', () => {
     );
   });
 
+  test('**标签名不许用 Hugo 自己那个 `.Title`** —— 它随遍历顺序变', () => {
+    // Hugo 把分类词大小写合并（`Netflix` 与 `netflix` 归成一个页面，这是对的），
+    // 但**显示成哪一种写法取的是它先遇到的那个**，而那取决于页面遍历顺序。
+    // 实测：同一份 canonical 连着生成两次，`tags/key.html` 一次是 `Key`、
+    // 一次是 `KEY`；标签总目里 `Xbox` / `XBOX` 也在跳。数据一个字节没变，产出却变了。
+    //
+    // 这不只是难看：样张仓库每次重新生成都会多出一条无意义的 diff，而一份存档的
+    // 价值有一半在于「没变的东西看得出没变」。
+    //
+    // 实测这份档案 712 个标签里有 14 组只差大小写。
+    assert.ok(existsSync(join(THEME, 'layouts/partials/termname.html')));
+    for (const f of ['layouts/_default/baseof.html', 'layouts/_default/list.html']) {
+      const t = readFileSync(join(THEME, f), 'utf-8');
+      assert.match(t, /partial "termname\.html"/, `${f} 该用稳定的那个名字`);
+    }
+    // 那个 partial 不许自己造一种写法出来——只在用户真的用过的几种里挑。
+    const p = readFileSync(join(THEME, 'layouts/partials/termname.html'), 'utf-8');
+    assert.match(p, /\$variants \| append/, '要从页面上的 tags 里收集实际用过的写法');
+    assert.match(p, /sort \(uniq \$variants\)/, '排序取第一个 —— 稳定且不发明写法');
+    assert.ok(!/humanize|title\b|upper/.test(p.replace(/\{\{-? ?\/\*[\s\S]*?\*\/ ?-?\}\}/g, '')),
+      '不许首字母大写 / 全大写 —— 那是替用户规范化他的标签');
+  });
+
   test('**页脚那句「与豆瓣无关」不许删**', () => {
     // 配色像豆瓣是有意的（这是你自己的豆瓣存档），但长得像和冒充是两回事，
     // 而这一句就是两者之间的线。

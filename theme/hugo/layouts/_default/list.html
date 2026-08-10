@@ -23,6 +23,9 @@
 
 {{ if and $isMedia $isFilter }}
   <h1>{{ $mediumName }} · {{ .Params.douban_verb }}</h1>
+{{ else if eq .Kind "term" }}
+  {{/* 标签页。标题要稳定，不能用 Hugo 自己取的那个——见 partials/termname.html。 */}}
+  <h1>{{ partial "termname.html" . }}</h1>
 {{ else }}
   <h1>{{ index $names .Section | default .Title }}</h1>
 {{ end }}
@@ -93,7 +96,9 @@
   <ul class="plainlist">
     {{ range $paginator.Pages }}
       <li class="entry">
-        <a href="{{ .RelPermalink }}"><b>{{ .Title }}</b></a>
+        {{/* 标签总目里列的是一个个标签页，它们的名字同样要稳定——`.Title` 是
+             Hugo 自己取的那个，会随遍历顺序在 `Xbox` 与 `XBOX` 之间跳。 */}}
+        <a href="{{ .RelPermalink }}"><b>{{ if eq .Kind "term" }}{{ partial "termname.html" . }}{{ else }}{{ .Title }}{{ end }}</b></a>
         <div class="meta-line">
           {{ with .Params.douban_published_at_raw }}{{ . }}{{ end }}
           {{ with .Params.douban_location }} · {{ . }}{{ end }}
