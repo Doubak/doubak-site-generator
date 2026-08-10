@@ -532,3 +532,36 @@ export function sectionIndexPage(section, title) {
 export function sectionIndexPath(section) {
   return `${section}/_index.md`;
 }
+
+/**
+ * 把一段文字放进 Markdown 图片的 title 里（`![alt](url "title")`）。
+ *
+ * **只转义反斜杠与双引号。** title 不是正文——里面的 `*` `_` `[` 不会被当成标记，
+ * 转义它们只会让页面上真的多出几个反斜杠。会坏事的只有那个用来收尾的引号：
+ * 实测这份档案里 112 个标题带引号或圆括号（`Sophie's World`、
+ * `Core Java, Volume II (10th Edition)`），其中带双引号的一旦不转义，
+ * 链接会从那儿断掉。
+ *
+ * @param {string} s
+ */
+export function mdTitleAttr(s) {
+  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+/**
+ * 首页封面条里的一项：`- [![名字](封面 "名字")](作品页.md)`。
+ *
+ * **`alt` 与 `title` 内容一样，用途不一样**：前者给读屏器，后者是鼠标停上去时的提示。
+ * 首页那一行只有封面没有字，不给 title 的话，想知道是哪一部就只能点进去。
+ *
+ * 单独一个函数是为了能直接测：这一行里有两处转义规则不同的地方（正文用
+ * `plainText`，title 用 `mdTitleAttr`），而写错了不会报错——只会在页面上多出几个
+ * 反斜杠，或者让链接从名字里的引号处断掉。
+ *
+ * @param {object} m 投影后的标记
+ * @param {string} coverPath 本地封面路径
+ */
+export function coverStripItem(m, coverPath) {
+  const name = m.title ?? '';
+  return `- [![${plainText(name)}](${coverPath} "${mdTitleAttr(name)}")](${markPath(m)})`;
+}

@@ -22,7 +22,7 @@ import { project, groupMarks } from './projection.js';
 import {
   markPage, longformPage, markPath, longformPath, verb,
   broadcastMonthPage, broadcastMonthPath, monthOf,
-  markFilterPath, markFilterPage, broadcastBlock, plainText,
+  markFilterPath, markFilterPage, broadcastBlock, plainText, coverStripItem,
   sectionIndexPath, sectionIndexPage,
 } from './markdown.js';
 import { indexImages, exportImages } from './images.js';
@@ -294,7 +294,7 @@ function homePage(p, { covers = {}, previewImages = {} } = {}) {
   const strip = (list) => list
     .filter((m) => covers[m.subjectId])
     .slice(0, STRIP)
-    .map((m) => `- [![${plainText(m.title ?? '')}](${covers[m.subjectId]})](${markPath(m)})`);
+    .map((m) => coverStripItem(m, covers[m.subjectId]));
 
   /** 按想要的顺序排，**名单之外的接在后面**——一个都不许丢。 */
   const order = (keys, want) => [

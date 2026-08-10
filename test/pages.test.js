@@ -21,7 +21,7 @@ import { project, groupMarks } from '../src/projection.js';
 import {
   markPage, longformPage, markPath, longformPath, verb,
   broadcastMonthPage, broadcastMonthPath, monthOf, plainText,
-  markFilterPath, markFilterPage,
+  markFilterPath, markFilterPage, mdTitleAttr, coverStripItem,
 } from '../src/markdown.js';
 
 /** 造一条 canonical 标记。 */
@@ -440,6 +440,34 @@ describe('按状态筛选', () => {
     const links = [...home.matchAll(/\]\(([^)]+)\)/g)].map((m) => m[1]);
     const bad = links.filter((u) => u.startsWith('/') && !u.startsWith('/covers/') && !u.startsWith('/uploads/'));
     assert.deepEqual(bad, [], '首页链接里出现了绝对路径');
+  });
+
+  test('**首页封面要能悬停看名字**，且带引号的名字不许把链接切断', () => {
+    // 首页那一行只有封面没有字，不给 title 的话想知道是哪一部就只能点进去。
+    // `alt` 给读屏器、`title` 给鼠标——两者内容一样，用途不一样。
+    const [p] = project({ marks: [mark()], subjects: [subject()] }).marks;
+    assert.equal(
+      coverStripItem(p, '/covers/x.jpg'),
+      '- [![某部电影](/covers/x.jpg "某部电影")](movie/36838707.md)',
+    );
+
+    // 图片的 title 用双引号收尾——名字里的双引号不转义的话，链接从那儿就断了。
+    // 实测这份档案里 112 个标题带引号或圆括号。
+    const s2 = subject({ revisions: [{
+      parser_version: 'p/1', first_observed_at: 'x', last_observed_at: 'x',
+      fields: { title: 'Say "Hello" (2nd Edition)', cover_url: null, raw_meta: null },
+      digests: {}, observations: [],
+    }] });
+    const [q] = project({ marks: [mark()], subjects: [s2] }).marks;
+    assert.match(coverStripItem(q, '/covers/y.jpg'), /\(\/covers\/y\.jpg "Say \\"Hello\\" \(2nd Edition\)"\)/);
+  });
+
+  test('**title 里只转义反斜杠与双引号** —— 别的转了会显示出反斜杠', () => {
+    // title 不是正文：里面的 `*` `_` `[` 不会被当成标记，转义它们只会让提示里
+    // 真的多出几个反斜杠。
+    assert.equal(mdTitleAttr('_(:з」∠)_ *星* [方]'), '_(:з」∠)_ *星* [方]');
+    assert.equal(mdTitleAttr('说 "引号"'), '说 \\"引号\\"');
+    assert.equal(mdTitleAttr('反斜杠\\结尾'), '反斜杠\\\\结尾');
   });
 
   test('**首页小节的顺序与页眉导航同一份**', () => {
