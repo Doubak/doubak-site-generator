@@ -604,6 +604,51 @@ describe('广播', () => {
     assert.deepEqual(r.images.remote, []);
   });
 
+  test('**广播里的星数是「那一天给了几颗」** —— 与作品页那个最新的分不是一回事', () => {
+    // 标记页只留最新那个分（改一次覆盖一次，豆瓣不留历史），而广播发布即冻结。
+    // 实测这份档案里 17 部作品的分在不同广播之间变过——那份变化史豆瓣自己都没有，
+    // 只有逐条列出来才看得见。
+    const p = project({
+      marks: [mark()], subjects: [subject()],
+      broadcasts: [bc({ target_id: '36838707', action: '看过', status: 'done', rating: 4 })],
+    });
+    const text = broadcastMonthPage('2021-11', p.broadcasts, {});
+    // 画满五颗、空的用 ☆——只写「4 星」的话，读者得自己记住满分是几。
+    assert.match(text, /★★★★☆/);
+
+    // 作品页的时间线上也要有。
+    const [pm] = p.marks;
+    assert.match(markPage(pm), /★★★★☆/);
+  });
+
+  test('没打分就什么都不画 —— **0 星和没打分是两件事**', () => {
+    const p = project({
+      marks: [mark()], subjects: [subject()],
+      broadcasts: [bc({ target_id: '36838707', action: '想看', status: 'wish' })],
+    });
+    const text = broadcastMonthPage('2021-11', p.broadcasts, {});
+    assert.ok(!/★|☆/.test(text), '没打分的广播不该出现星');
+  });
+
+  test('**归并之后星数不许丢** —— 时间来自广播、分可能在标记那一侧', () => {
+    // 同一次「看过」会同时出现在广播（秒级、常常没短评）和标记修订（有短评、
+    // 只到天）里，归并成一条。只按被留下的那一条取值的话，星数会时有时无。
+    const p = project({
+      marks: [mark({
+        revisions: [rev({ status: 'done', rating: 5, comment: '标记页上的短评' }, '2026-08-01T00:00:00+08:00')],
+      })],
+      subjects: [subject()],
+      broadcasts: [bc({
+        target_id: '36838707', action: '看过', status: 'done', text: null, rating: null,
+        posted_at: { raw: '2026-08-01 20:00:00', iso: '2026-08-01T20:00:00+08:00', precision: 'second' },
+      })],
+    });
+    const [pm] = p.marks;
+    assert.equal(pm.timeline.length, 1, '同一次标记不该列两遍');
+    assert.equal(pm.timeline[0].rating, 5, '星数记在标记那一侧，归并后要留住');
+    assert.equal(pm.timeline[0].atRaw, '2026-08-01 20:00:00', '时间要取精度高的那个');
+  });
+
   test('**「看过 X」那一行配一张作品封面** —— 与豆瓣一样', () => {
     const p = project({
       marks: [mark()], subjects: [subject()],

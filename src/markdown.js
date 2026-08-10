@@ -152,7 +152,13 @@ function timelineSection(m) {
     const what = mixed
       ? `${act || label} · 时间来自${label}，短评来自${r.textSource === 'mark' ? '标记页' : '广播'}`
       : (act ? `${label} · ${act}` : label);
-    out.push(`### ${when}`, '', `*${what}*`, '');
+    // **那一天给了几颗星。** 这是这一段最值钱的一列：标记页只留最新那个分
+    // （改一次覆盖一次，豆瓣不留历史），而广播是冻结的。实测这份档案里有 17 部
+    // 作品的分变过——那份变化史豆瓣自己都没有，只有把它逐条列出来才看得见。
+    //
+    // 画满五颗、空的用 ☆：只写「4 星」的话，读者得自己记住满分是几。
+    const stars = r.rating ? ` · ${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}` : '';
+    out.push(`### ${when}`, '', `*${what}${stars}*`, '');
     // 没有短评就只有这一行——**不编一句「无短评」**，那会让「没写」和
     // 「写了但抓不到」在页面上长得一样。
     if (r.text) out.push(plainText(r.text), '');
@@ -343,6 +349,9 @@ export function broadcastMonthPage(month, list, { images = {}, covers = {} } = {
       if (cover) parts.push(`[![${label}](${cover})](${href})`);
       if (b.action) parts.push(b.action);
       parts.push(`[${label}](${href})`);
+      // 发这条广播时给的星数。它是**那一刻**的分，而作品页上那个是最新的——
+      // 两个数不一样时，不一样本身就是内容。
+      if (b.rating) parts.push(`${'★'.repeat(b.rating)}${'☆'.repeat(5 - b.rating)}`);
       line = parts.join(' ');
     }
     if (line) {

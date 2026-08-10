@@ -97,6 +97,9 @@ function broadcastsBySubject(broadcasts, marks) {
       textSource: f.text ? 'broadcast' : null,
       status: f.status ?? null,
       action: f.action ?? null,
+      // **那一天给了几颗星。** 标记只留最新那个分（改一次覆盖一次，豆瓣不留历史），
+      // 而广播冻结。实测这份档案里 17 部作品的分变过——那份变化史豆瓣自己没有。
+      rating: f.rating ?? null,
       text: f.text,
       truncated: Boolean(f.text_truncated),
     });
@@ -129,6 +132,9 @@ function buildTimeline(m, fromBroadcasts) {
       textSource: f.comment ? 'mark' : null,
       status: f.status,
       action: null,
+      // 标记页上的评分是**可变**的，与广播那个「那一天给了几颗星」性质不同。
+      // 两者都收，归并时取有值的那个。
+      rating: f.rating ?? null,
       text: f.comment,
       truncated: false,
     });
@@ -168,9 +174,13 @@ function buildTimeline(m, fromBroadcasts) {
     if (!prev) { byEvent.set(key, { ...r }); continue; }
     const base = rank(r) < rank(prev) ? r : prev;
     const withText = prev.text ? prev : (r.text ? r : null);
+    const withRating = prev.rating != null ? prev : (r.rating != null ? r : null);
     byEvent.set(key, {
       ...base,
       text: withText?.text ?? null,
+      // 星数与短评一样，可能来自被丢掉的那一条：广播给了准确到秒的时间，
+      // 而分可能记在标记那一侧（或反过来）。只按 `...base` 取的话会时有时无。
+      rating: withRating?.rating ?? null,
       truncated: prev.truncated || r.truncated,
       // 归并之后**时间和短评可能来自不同的地方**：广播给了准确到秒的时间，
       // 短评却在标记页上。分开记下来，页面上才能说准——否则会读成
@@ -236,6 +246,8 @@ function projectBroadcast(b, targets) {
     text: f.text ?? null,
     action: f.action ?? null,
     status: f.status ?? null,
+    // 发这条广播时给的星数，见上。
+    rating: f.rating ?? null,
     targetId: f.target_id ?? null,
     // 接得回本地作品页的才接。接不回来的（撞车、或者那个作品根本没被标记过）
     // 保持 null——宁可少一个链接。
