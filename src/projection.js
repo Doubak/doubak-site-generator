@@ -249,6 +249,9 @@ function projectBroadcast(b, targets) {
     // 发这条广播时给的星数，见上。
     rating: f.rating ?? null,
     targetId: f.target_id ?? null,
+    // 卡片上那个作品名。**接不回本地作品页时，靠它才说得出这条广播在讲什么**——
+    // 实测 162 条广播指向本地没有的条目（被豆瓣删了、或豆列这类不产生标记的东西）。
+    targetTitle: f.target_title ?? null,
     // 接得回本地作品页的才接。接不回来的（撞车、或者那个作品根本没被标记过）
     // 保持 null——宁可少一个链接。
     target: target ? { medium: target.medium, subjectId: target.subjectId, title: target.title } : null,

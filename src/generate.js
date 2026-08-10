@@ -246,7 +246,7 @@ const SECTION_ORDER = ['broadcast', 'book', 'movie', 'game', 'music', 'drama', '
 const STATUS_ORDER = ['wish', 'doing', 'done'];
 
 /** 首页每一行摆几张封面。摆不下的由主题裁掉——一行就是一行。 */
-const STRIP = 10;
+const STRIP = 12;
 
 /** 广播、日记、评论各给几条预览。 */
 const PREVIEW = 2;

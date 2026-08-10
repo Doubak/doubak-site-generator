@@ -299,6 +299,18 @@ export function broadcastBlock(b, { images = {}, covers = {}, linkPrefix = '../'
   const t = b.target;
   /** @type {string|null} 「[封面] 玩过 作品名」那一行 */
   let line = b.action || null;
+  // **接不回本地作品页，也要把名字说出来。**
+  //
+  // 条目被豆瓣删掉之后，标记列表里就没有它了，而这条广播还在——页面上原来只剩
+  // 「想看」两个字后面空着，看起来像抓漏了。而名字一直就在广播的卡片里
+  // （广播发布即冻结，所以那是**那一刻**的名字）。实测 162 条这样的广播，
+  // 其中 104 条是真作品，卡片里都有名字。
+  //
+  // 不给链接：本地没有那一页。**也绝不回退到豆瓣的 URL**——那会让一份号称
+  // 离线可看的档案为了一个链接去联网。
+  if ((!t || !t.title) && b.targetTitle) {
+    line = [b.action, plainText(b.targetTitle)].filter(Boolean).join(' ');
+  }
   if (t && t.title) {
     const href = `${linkPrefix}${t.medium}/${t.subjectId}.md`;
     // **标题要转义。** 它是豆瓣给的字，而这里正把它塞进 Markdown 的链接文字里。

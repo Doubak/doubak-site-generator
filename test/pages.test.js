@@ -712,6 +712,35 @@ describe('广播', () => {
     assert.ok(!/!\[\]\(\/covers/.test(text), '封面的 alt 不许是空的');
   });
 
+  test('**条目被豆瓣删了，广播里那个名字还在** —— 说得出，但不给链接', () => {
+    // 条目被删之后标记列表里就没有它了，而广播还在。页面上原来只剩「想看」两个字
+    // 后面空着，看起来像抓漏了——而名字一直就在广播的卡片里（发布即冻结，
+    // 所以那是那一刻的名字）。实测 162 条这样的广播，104 条是真作品。
+    const p = project({
+      marks: [], subjects: [],
+      broadcasts: [bc({
+        target_id: '35284243', target_title: '莫阿娜 Moana (2026)',
+        action: '想看', status: 'wish', text: '最后一部真人版 看看咋样',
+      })],
+    });
+    const text = broadcastMonthPage('2026-01', p.broadcasts, {});
+    assert.match(text, /想看 莫阿娜 Moana \(2026\)/);
+    // **不给链接**：本地没有那一页。也绝不回退到豆瓣 URL——那会让一份号称离线可看
+    // 的档案为了一个链接去联网。
+    assert.ok(!/douban\.com/.test(text), '不许回退到豆瓣的地址');
+  });
+
+  test('接得回本地作品页时，以本地那一份为准', () => {
+    // 两者都在时用本地页：那是更完整的记录（有封面、有评分、有完整的时间线）。
+    const p = project({
+      marks: [mark()], subjects: [subject()],
+      broadcasts: [bc({ target_id: '36838707', target_title: '卡片上的旧名字', action: '看过', status: 'done' })],
+    });
+    const text = broadcastMonthPage('2021-11', p.broadcasts, {});
+    assert.match(text, /看过 \[某部电影\]\(\.\.\/movie\/36838707\.md\)/);
+    assert.ok(!/卡片上的旧名字/.test(text));
+  });
+
   test('没有封面就只剩文字链接 —— **不放占位图**', () => {
     // 上游被删的作品本来就没有封面（实测 13 条）。塞一张占位图会让「没有」
     // 看起来像「有一张空白的」。
