@@ -572,6 +572,48 @@ describe('广播', () => {
     assert.match(text, /!\[\]\(\/uploads\/p1\.jpg\)/);
   });
 
+  test('**「看过 X」那一行配一张作品封面** —— 与豆瓣一样', () => {
+    const p = project({
+      marks: [mark()], subjects: [subject()],
+      broadcasts: [bc({ target_id: '36838707', action: '看过', status: 'done' })],
+    });
+    const text = broadcastMonthPage('2021-11', p.broadcasts, {
+      covers: { 36838707: '/covers/x.jpg' },
+    });
+    // **图与标题共用一个 `<a>`。** 两个指向同一处的相邻链接对读屏器是重复的；
+    // 而 alt 留空是因为标题就在旁边——那张图在这里是装饰，不是信息。
+    assert.match(text, /\[!\[\]\(\/covers\/x\.jpg\)某部电影\]\(\.\.\/movie\/36838707\.md\)/);
+  });
+
+  test('没有封面就只剩文字链接 —— **不放占位图**', () => {
+    // 上游被删的作品本来就没有封面（实测 13 条）。塞一张占位图会让「没有」
+    // 看起来像「有一张空白的」。
+    const p = project({
+      marks: [mark()], subjects: [subject()],
+      broadcasts: [bc({ target_id: '36838707', action: '看过', status: 'done' })],
+    });
+    const text = broadcastMonthPage('2021-11', p.broadcasts, {});
+    assert.match(text, /看过 \[某部电影\]\(\.\.\/movie\/36838707\.md\)/);
+    assert.ok(!/!\[\]/.test(text.split('## ')[0] + text), '不该凭空多出一张图');
+  });
+
+  test('**作品名要转义** —— 它是豆瓣给的字，正被塞进 Markdown 的链接文字里', () => {
+    // 实测这份档案里 6 个标题带方括号（`Fate/stay night [Heaven's Feel]`）、
+    // 5 个带下划线（`SAC_2045`）。今天它们恰好都是平衡的、恰好都在词中间，
+    // 所以侥幸没出事——「恰好没事」不是判据。
+    const s = subject({ revisions: [{
+      parser_version: 'p/1', first_observed_at: 'x', last_observed_at: 'x',
+      fields: { title: "Fate/stay night [Heaven's Feel]", cover_url: null, raw_meta: null },
+      digests: {}, observations: [],
+    }] });
+    const p = project({
+      marks: [mark()], subjects: [s],
+      broadcasts: [bc({ target_id: '36838707', action: '想看', status: 'wish' })],
+    });
+    const text = broadcastMonthPage('2021-11', p.broadcasts, {});
+    assert.match(text, /\\\[Heaven's Feel\\\]/, '方括号必须转义，否则链接会被截断');
+  });
+
   test('**一条广播的附图写在同一行里** —— 一张一段就是一列铺满宽度的大图', () => {
     // 实测这份档案里一条广播最多带 18 张。一张一段的话每张各占一个 `<p>`，
     // 在页面上就是十八屏，正文被推到看不见。同一行则渲染成一个 `<p>` 里的
@@ -654,6 +696,23 @@ describe('Hugo 骨架', () => {
       '缩略规则必须限定在 .section-broadcast 里');
     // 反面：不许有一条不分小节的全局图片高度上限。
     assert.ok(!/^article img \{[^}]*max-height/m.test(css), '这会把日记的插图也缩了');
+  });
+
+  test('**封面与附图靠「链接指向哪儿」区分，而且不许被 :only-child 那条盖掉**', () => {
+    // 两者在 HTML 里都是 `<p>` 里的 `<a><img>`，该有的大小差着一个数量级：
+    // 封面 2.6em 贴在一行字旁边，附图 9rem 排成一排。判据是附图链到图片自己
+    // （`…/uploads/p1.jpg`），封面链到作品页（`…/movie/1.html`）。
+    //
+    // 那条「只有一张图就放大到 22rem」必须排掉页面链接：`<p>看过 <a>…</a></p>`
+    // 里的 `<a>` **也是 `:only-child`**（文本节点不算兄弟），而两条选择器的
+    // 优先级一模一样、后写的赢——后写的恰好是 22rem 那条。不排的话封面会被撑大。
+    const css = readFileSync(join(THEME, 'static/site.css'), 'utf-8');
+    assert.match(css, /a\[href\$="\.html"\] img\s*\{/, '封面规则该按链接目标限定');
+    assert.ok(
+      !/a:only-child img/.test(css),
+      '「只有一张图」那条没有排掉页面链接，封面会被当成大图放大',
+    );
+    assert.match(css, /a:only-child:not\(\[href\$="\.html"\]\) img/);
   });
 
   test('**筛选片上的条数来自各自那一页，不是当前这一页数出来的**', () => {

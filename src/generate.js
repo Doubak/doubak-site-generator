@@ -111,8 +111,18 @@ export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir
     if (!byMonth.has(k)) byMonth.set(k, []);
     byMonth.get(k).push(b);
   }
+  // 作品 id → 本地封面路径。广播里「看过 X」那一行要配一张小封面，与豆瓣一样。
+  // **用的是标记页那套同一个查法**（先按作品 id，再按 URL 退一步），不另写一份：
+  // 两份查法迟早会分叉，而分叉的样子是「有些广播有封面、有些没有」，看起来像数据缺。
+  /** @type {Record<string, string>} */
+  const covers = {};
+  for (const m of p.marks) {
+    const c = coverBySubject[m.subjectId] ?? paths[m.coverUrl] ?? null;
+    if (c) covers[m.subjectId] = c;
+  }
+
   for (const [month, list] of byMonth) {
-    files.push([join('content', broadcastMonthPath(month)), broadcastMonthPage(month, list, { images: paths })]);
+    files.push([join('content', broadcastMonthPath(month)), broadcastMonthPage(month, list, { images: paths, covers })]);
   }
 
   // 每个媒介的每个状态一页（`movie/done/`）。**只给真有条目的状态出页**——

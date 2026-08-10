@@ -279,7 +279,7 @@ export function longformPath(r) {
  * @param {object[]} list 该月的广播，未排序
  * @param {{images?: Record<string, string>}} [opts] 附图 URL → 本地路径
  */
-export function broadcastMonthPage(month, list, { images = {} } = {}) {
+export function broadcastMonthPage(month, list, { images = {}, covers = {} } = {}) {
   const sorted = [...list].sort((a, b) => (a.postedAt < b.postedAt ? 1 : -1));
   const [y, m] = month.split('-');
 
@@ -316,7 +316,23 @@ export function broadcastMonthPage(month, list, { images = {} } = {}) {
     // 与那个作品完全断开——而它的 target_id 就在数据里。实测只影响 1 条，
     // 但断开的理由是「代码结构」而不是「数据没有」，那就是个 bug。
     const t = b.target;
-    const link = t && t.title ? `[${t.title}](../${t.medium}/${t.subjectId}.md)` : null;
+    let link = null;
+    if (t && t.title) {
+      // **封面放进同一个链接里，不另起一个。** 豆瓣的广播就是一张小封面加一行字，
+      // 长得眼熟本身就是功能。但两个指向同一处的相邻链接对读屏器是重复的，
+      // 所以图与标题共用一个 `<a>`，图的 alt 留空——标题就在旁边，
+      // 那张图在这里是装饰，不是信息。
+      //
+      // 封面来自档案里已经存下的那张（`static/covers/`），不是去豆瓣现取的。
+      // 没有封面就只剩文字链接，不放占位图：占位符不是内容。
+      const cover = covers[t.subjectId];
+      // **标题要转义。** 它是豆瓣给的字，而这里正把它塞进 Markdown 的链接文字里。
+      // 实测这份档案里 6 个标题带方括号（`Fate/stay night [Heaven's Feel]`）、
+      // 5 个带下划线（`SAC_2045`）——今天它们恰好都是平衡的、恰好都在词中间，
+      // 所以侥幸没出事。**「恰好没事」不是判据。**
+      const label = plainText(t.title);
+      link = `[${cover ? `![](${cover})` : ''}${label}](../${t.medium}/${t.subjectId}.md)`;
+    }
     if (b.action || link) {
       out.push([b.action, link].filter(Boolean).join(' '), '');
     }
