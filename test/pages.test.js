@@ -1244,6 +1244,86 @@ describe('Hugo 骨架', () => {
     const missing = [...used].filter((k) => !emitted.has(k));
     assert.deepEqual(missing, [], `模板引用了生成器不写的键：${missing.join(' ')}`);
   });
+
+  test('**`:has()` 里不许再套一个 `:has()`** —— 整条选择器会被丢掉，一句警告都没有', () => {
+    // 规范禁止 `:has()` 嵌套，浏览器的做法是把**整条选择器**当成非法的扔掉。
+    // CSS 没有语法错误这一说，扔掉的时候不出声，于是这条规则就当从来没写过。
+    //
+    // 实测踩到的样子：首页那个「看全部 N →」的 clear 写成
+    // `p:has(> a:only-child:not(:has(img)))` 被整条丢掉，而紧挨着的按钮外观写的是
+    // `p > a…:not(:has(img))`（`:has()` 套在 `:not()` 里合法）照常生效——
+    // 页面上于是有一个**长得完全对、位置却错了**的按钮，贴在浮动封面右边。
+    // 「样式坏了」通常表现为难看，这一种表现为好看但不对，更不容易被当成 bug。
+    //
+    // 扫的是全部主题 CSS，不是出过事的那一行：这个坑的代价是「写了等于没写」，
+    // 而下一次写它的人不会知道自己踩了。
+    const files = readdirSync(join(THEME_DIR, 'static')).filter((f) => f.endsWith('.css'));
+    assert.ok(files.length, '一个 CSS 文件都没扫到，扫描本身坏了');
+
+    /** 取出每条规则的选择器文本：先去注释，再切 `{` 之前的部分。 */
+    const selectors = (css) => css
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('}')
+      .flatMap((chunk) => (chunk.includes('{') ? [chunk.slice(0, chunk.indexOf('{'))] : []))
+      .map((s) => s.trim())
+      .filter((s) => s && !s.startsWith('@'));
+
+    /** 从每个 `:has(` 起数括号配对，看它自己的参数里有没有第二个 `:has(`。 */
+    const nested = (sel) => {
+      for (let i = sel.indexOf(':has('); i >= 0; i = sel.indexOf(':has(', i + 1)) {
+        let depth = 0;
+        for (let j = i + 4; j < sel.length; j += 1) {
+          if (sel[j] === '(') depth += 1;
+          else if (sel[j] === ')') { depth -= 1; if (depth === 0) break; }
+          else if (depth > 0 && sel.startsWith(':has(', j)) return true;
+        }
+      }
+      return false;
+    };
+
+    // 反面判据：这个扫描器本身得真能认出嵌套，否则它永远绿。
+    assert.ok(nested('p:has(> a:not(:has(img)))'), '扫描器认不出嵌套的 :has()');
+    assert.ok(!nested('p:not(:has(img)):has(> a:only-child)'), '并列的两个 :has() 是合法的');
+
+    const bad = [];
+    for (const f of files) {
+      for (const sel of selectors(readFileSync(join(THEME_DIR, 'static', f), 'utf-8'))) {
+        if (nested(sel)) bad.push(`${f}: ${sel}`);
+      }
+    }
+    assert.deepEqual(bad, [], `这些选择器里 :has() 套了 :has()，浏览器会整条丢掉：\n${bad.join('\n')}`);
+  });
+
+  test('**「看全部」的清浮动与外观共用同一个 `p` 判据** —— 免得只坏一半', () => {
+    // 上一条测的是「不许嵌套」，这一条测的是那次踩坑的另一半：两条规则各自挑
+    // 那个 `<p>`，其中一条非法被丢掉，另一条照常生效，坏法就只露出一半。
+    // 共用同一段判据之后，它要么两条一起中、要么两条一起不中——不会再出现
+    // 「药丸有了，clear 没了」这种看起来只是缩进不对、其实是选择器整条没生效的样子。
+    const css = readFileSync(join(THEME_DIR, 'static/site.css'), 'utf-8');
+    const SHARED = '.section-home p:not(:has(img))';
+    for (const sel of [`${SHARED}:has(> a:only-child)`, `${SHARED} > a:only-child`]) {
+      assert.ok(css.includes(sel), `CSS 里找不到 ${sel}`);
+    }
+
+    // 清了浮动之后，元素上边缘落在浮动的**外边距**下沿——自己的 margin-top 就用不上了。
+    // 所以「按钮离上面多远」在广播那一节由封面的下边距说了算，在其余各节由按钮的
+    // 上边距说了算。两个值必须相等，否则同一个按钮在首页上下会有两种间距。
+    const decl = (re) => {
+      const m = re.exec(css);
+      assert.ok(m, `CSS 里找不到 ${re}`);
+      return m[1];
+    };
+    const button = /margin-top:\s*var\((--s\d)\)/
+      .exec(decl(/\.section-home p:not\(:has\(img\)\):has\(> a:only-child\) \{([^}]*)\}/));
+    const cover = /margin:[^;]*?var\((--s\d)\) 0;/
+      .exec(decl(/\.section-home p > a\[href\$="\.html"\] > img \{([^}]*)\}/));
+    assert.ok(button, '按钮没写死上边距，它会跟着上一个元素（ul / p / h3 各不相同）变');
+    assert.ok(cover, '预览封面的下边距不是一个间距变量');
+    assert.equal(
+      cover[1], button[1],
+      `清浮动后按钮离封面 ${cover[1]}，离其余元素 ${button[1]}——同一个按钮两种间距`,
+    );
+  });
 });
 
 describe('用户写的字必须原样呈现', () => {
