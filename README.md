@@ -53,6 +53,7 @@ node bin/site.js     <canonical> <bundles> [out] [--serve]
 │   ├── movie/ book/ music/ game/ drama/   一个作品一页，文件名是作品 id
 │   │   └── done/ doing/ wish/             按状态筛过的那一页，各自一个 _index.md
 │   ├── note/ review/      日记与评论全文
+│   ├── doulist/           自己编的豆列：清单本身，以及每个条目上自己写的评语
 │   └── broadcast/         按月归档，2014-01.md … 2026-08.md
 ├── static/
 │   ├── covers/            作品封面
@@ -129,6 +130,7 @@ npm run md -- <canonical> <bundles> <out>
 | 键 | 出现在 |
 |---|---|
 | `douban_kind` | 全部。取值 `mark` / `note` / `review` / `broadcast_month` / `index` |
+| `douban_visibility` `douban_private` `douban_item_count` | 豆列。**`douban_private` 在 `unknown` 时也是 true** —— 把「不知道是不是私密的」显示成公开，是这一档上唯一不可逆的错法 |
 | `douban_medium` `douban_status` `douban_verb` `douban_rating` `douban_cover` `douban_meta` `douban_upstream_deleted` | 标记 |
 | `douban_published_at_raw` `douban_location` `douban_subject_url` | 日记与评论 |
 | `douban_month` `douban_count` `douban_with_text` `douban_images` | 广播月页 |
@@ -211,7 +213,7 @@ From <May December>  →  From                 整个片名消失
 
 | | 提供什么 |
 |---|---|
-| canonical | 有什么：标记、作品、长文、广播 |
+| canonical | 有什么：标记、作品、长文、广播、豆列 |
 | bundle | 图片的字节 —— canonical 是文本，用 `jq` 就能查，不装二进制 |
 
 **整个过程零网络请求。** 站点也是派生数据，那条不变量在这里同样成立：丢掉产出目录、只靠档案重建，必须能离线跑通。
