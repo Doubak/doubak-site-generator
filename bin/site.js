@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 
 import { generate } from '../src/generate.js';
 import { ensureHugo } from '../src/hugo-bin.js';
+import { readCanonical } from '../src/canonical.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -35,20 +36,9 @@ if (noTheme) {
   process.exit(2);
 }
 
-const read = (name) => {
-  const p = join(canonDir, name);
-  if (!existsSync(p)) return [];
-  return readFileSync(p, 'utf-8').trimEnd().split('\n').filter(Boolean).map((l) => JSON.parse(l));
-};
-
 const t0 = Date.now();
 const r = generate({
-  canonical: {
-    marks: read('marks.ndjson'),
-    subjects: read('subjects.ndjson'),
-    longform: read('longform.ndjson'),
-    broadcasts: read('broadcasts.ndjson'),
-  },
+  canonical: readCanonical(canonDir),
   bundlesDir,
   outDir,
   themeDir: join(HERE, '..', 'theme', 'hugo'),

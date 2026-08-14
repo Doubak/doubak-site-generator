@@ -9,6 +9,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generate } from '../src/generate.js';
+import { readCanonical } from '../src/canonical.js';
 
 const args = process.argv.slice(2);
 // **默认带上那个最小 Hugo 骨架**，让产出目录直接能跑起来。
@@ -22,21 +23,9 @@ if (!canonDir) {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-const read = (name) => {
-  const p = join(canonDir, name);
-  if (!existsSync(p)) return [];
-  return readFileSync(p, 'utf-8').trimEnd().split('\n').filter(Boolean).map((l) => JSON.parse(l));
-};
-
 const t0 = Date.now();
 const r = generate({
-  canonical: {
-    marks: read('marks.ndjson'),
-    subjects: read('subjects.ndjson'),
-    longform: read('longform.ndjson'),
-    broadcasts: read('broadcasts.ndjson'),
-    doulists: read('doulists.ndjson'),
-  },
+  canonical: readCanonical(canonDir),
   bundlesDir,
   outDir,
   themeDir: withTheme ? join(HERE, '..', 'theme', 'hugo') : null,

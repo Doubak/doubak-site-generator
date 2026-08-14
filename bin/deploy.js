@@ -33,6 +33,7 @@ import { fileURLToPath } from 'node:url';
 
 import { generate } from '../src/generate.js';
 import { ensureHugo } from '../src/hugo-bin.js';
+import { readCanonical } from '../src/canonical.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -53,24 +54,13 @@ if (!existsSync(repoDir)) {
 /** 仓库自己的东西，不属于站点，任何时候都不动。 */
 const KEEP = new Set(['.git', '.gitignore', 'CNAME', 'LICENSE', 'README.md', '.github']);
 
-const read = (name) => {
-  const p = join(canonDir, name);
-  if (!existsSync(p)) return [];
-  return readFileSync(p, 'utf-8').trimEnd().split('\n').filter(Boolean).map((l) => JSON.parse(l));
-};
-
 // ── ① 构建到一个暂存目录（不是仓库目录——构建中途失败不该把仓库搞成半成品）
 const stage = join(HERE, '..', '.deploy-stage');
 rmSync(stage, { recursive: true, force: true });
 
 const t0 = Date.now();
 const r = generate({
-  canonical: {
-    marks: read('marks.ndjson'),
-    subjects: read('subjects.ndjson'),
-    longform: read('longform.ndjson'),
-    broadcasts: read('broadcasts.ndjson'),
-  },
+  canonical: readCanonical(canonDir),
   bundlesDir,
   outDir: stage,
   themeDir: join(HERE, '..', 'theme', 'hugo'),
