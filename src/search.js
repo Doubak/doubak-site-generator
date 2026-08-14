@@ -31,7 +31,7 @@
  * 一条可搜的记录。**键名都很短**——4000 条乘以几个字符，省下来的是实打实的传输量。
  *
  * @typedef {object} SearchRow
- * @property {'m'|'b'|'l'} t  类型：标记 / 广播 / 长文
+ * @property {'m'|'b'|'l'|'d'} t  类型：标记 / 广播 / 长文 / 豆列
  * @property {string} u       站内路径，**不带扩展名**（`movie/1292052`）。
  *                            扩展名由消费者补——它取决于 SSG 的固定链接方案，
  *                            而索引不该替 SSG 做这个决定。
@@ -45,7 +45,7 @@
  */
 
 /**
- * @param {{marks: object[], longform: object[], broadcasts: object[]}} p 投影
+ * @param {{marks: object[], longform: object[], broadcasts: object[], doulists?: object[]}} p 投影
  * @returns {{rows: SearchRow[], js: string}}
  */
 export function buildSearchIndex(p) {
@@ -101,6 +101,31 @@ export function buildSearchIndex(p) {
       c: r.body ?? '',
       d: r.publishedAtRaw ?? '',
       k: r.kind,
+    });
+  }
+
+  // 豆列：**收的是自己写的字**，不是清单本身。
+  //
+  // 一份豆列真正可搜的东西有两处：它的简介，和每个条目上的评语——后者实测 134 个
+  // 条目里有 62 条。而条目的标题、简介、评分都是豆瓣的目录数据：作品标题已经由
+  // marks 那一档收过了，在这儿再收一遍只会让同一个名字出来两条结果，其中一条点进去
+  // 是「某份豆列」而不是那部作品。
+  //
+  // 一条豆列一行，评语拼在一起——搜到的是「哪份豆列里写过这句话」，而豆列页不长，
+  // 点进去就能找到。拆成一条条目一行会让 6 份豆列变成 134 行，把别的结果挤下去。
+  for (const d of p.doulists ?? []) {
+    const own = [d.description ?? '', ...d.items.map((i) => i.comment ?? '')]
+      .filter(Boolean).join('\n');
+    // 一个字都没写过的豆列（纯书签夹）就别进索引了：它没有任何**你的**内容，
+    // 而标题已经能从别处找到。
+    if (!own) continue;
+    rows.push({
+      t: 'd',
+      u: `doulist/${d.id}`,
+      n: d.title,
+      c: own,
+      d: d.lastSeenAt ?? '',
+      k: 'doulist',
     });
   }
 

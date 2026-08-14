@@ -99,9 +99,14 @@
         {{/* 标签总目里列的是一个个标签页，它们的名字同样要稳定——`.Title` 是
              Hugo 自己取的那个，会随遍历顺序在 `Xbox` 与 `XBOX` 之间跳。 */}}
         <a href="{{ .RelPermalink }}"><b>{{ if eq .Kind "term" }}{{ partial "termname.html" . }}{{ else }}{{ .Title }}{{ end }}</b></a>
+        {{/* 私密豆列在**目录页上也要看得见**。只在点进去才说，等于目录页把一份
+             私密的和一份公开的画成一模一样——而这份站点是可以发布出去的，目录页
+             又恰恰是别人扫一眼的地方。`douban_private` 在 unknown 时也是 true。 */}}
+        {{ if .Params.douban_private }}<span class="lock" title="私密豆列：在豆瓣上只有你自己看得见">🔒</span>{{ end }}
         <div class="meta-line">
           {{ with .Params.douban_published_at_raw }}{{ . }}{{ end }}
           {{ with .Params.douban_location }} · {{ . }}{{ end }}
+          {{ with .Params.douban_item_count }}{{ . }} 条{{ end }}
           {{ partial "stars.html" .Params.douban_rating }}
         </div>
       </li>

@@ -19,7 +19,7 @@ const THEME_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'theme', '
 
 import { project, groupMarks } from '../src/projection.js';
 import {
-  markPage, longformPage, markPath, longformPath, verb,
+  markPage, longformPage, doulistPage, markPath, longformPath, verb,
   broadcastMonthPage, broadcastMonthPath, monthOf, plainText,
   markFilterPath, markFilterPage, mdTitleAttr, coverStripItem,
 } from '../src/markdown.js';
@@ -1239,6 +1239,9 @@ describe('Hugo 骨架', () => {
       ...longformPage({ kind: 'note', id: '1', url: null, title: 't', body: 'b',
         publishedAt: null, publishedAtRaw: null, location: null, rating: null,
         subjectUrl: null, revisionCount: 1, lastSeenAt: 'x' }).matchAll(/^(douban_\w+):/gm),
+      ...doulistPage({ id: '1', url: null, title: 't', description: null, visibility: 'public',
+        ownership: 'created', revisionCount: 1, lastSeenAt: 'x', items: [] })
+        .matchAll(/^(douban_\w+):/gm),
     ].map((m) => m[1]));
 
     const missing = [...used].filter((k) => !emitted.has(k));
