@@ -273,6 +273,63 @@ export function markFilterPage(medium, status, count) {
 }
 
 /** @param {object} r */
+/**
+ * 一份豆列的页面。
+ *
+ * ## 锁形图标：把「我们知道它是私密的」显示出来
+ *
+ * 私密豆列**照常渲染**（档案主人的决定），但标题前挂一个 🔒。理由不是装饰：
+ * 一份私密豆列渲染得跟公开的一模一样，等于把用户在豆瓣上明确做过的那个选择从
+ * 档案里抹掉了——而这份站点是可以发布到 GitHub Pages 的。
+ *
+ * `unknown`（连 `<h1>` 都没找到，抽取器可能坏了）**也挂锁**，措辞另说。把
+ * 「不知道」显示成「公开」是这一档上唯一不可逆的错法。
+ *
+ * 图标进 front matter 也进正文标题：主题可能只用其中一处，两处都给才不会漏。
+ */
+export function doulistPage(r) {
+  const locked = r.visibility !== 'public';
+  const fm = {
+    title: r.title ?? '(无标题)',
+    douban_id: r.id,
+    douban_url: r.url,
+    douban_visibility: r.visibility,
+    douban_private: locked,
+    douban_item_count: r.items.length,
+    douban_revisions: r.revisionCount,
+    douban_last_seen: r.lastSeenAt,
+  };
+
+  const out = [];
+  if (locked) {
+    out.push(r.visibility === 'private'
+      ? '🔒 **这是一份私密豆列** —— 在豆瓣上只有你自己看得见。'
+      : '🔒 **不确定这份豆列是不是公开的** —— 抓取时没能读出可见性，'
+        + '这里按私密显示。（说成公开是这一档上唯一不可逆的错法。）');
+    out.push('');
+  }
+  // 简介是用户写的字，必须转义。
+  if (r.description) out.push(plainText(r.description), '');
+
+  for (const it of r.items) {
+    // 目标页**不在档案里**（豆列条目的目标不跟进去抓），所以这是个站外链接，
+    // 不是站内链接——不能用 `../movie/123.md` 那套。
+    const title = plainText(it.title ?? '(未命名条目)');
+    out.push(it.url ? `### [${title}](${it.url})` : `### ${title}`);
+    // 豆瓣的评分与简介是目录数据，和用户写的评语必须分开显示，否则读的人分不出
+    // 哪句话是自己写的。
+    if (it.rating) out.push('', `评分：${plainText(it.rating)}`);
+    if (it.comment) out.push('', `> ${plainText(it.comment).split('\n').join('\n> ')}`);
+    out.push('');
+  }
+  return frontMatter(fm) + '\n' + out.join('\n');
+}
+
+/** @param {{id: string}} r */
+export function doulistPath(r) {
+  return `doulist/${r.id}.md`;
+}
+
 export function longformPath(r) {
   return `${r.kind}/${r.id}.md`;
 }

@@ -35,6 +35,7 @@ const r = generate({
     subjects: read('subjects.ndjson'),
     longform: read('longform.ndjson'),
     broadcasts: read('broadcasts.ndjson'),
+    doulists: read('doulists.ndjson'),
   },
   bundlesDir,
   outDir,

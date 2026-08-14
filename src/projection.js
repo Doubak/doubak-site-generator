@@ -21,8 +21,9 @@
  * @param {object[]} subjects    canonical 的 subjects.ndjson
  * @param {object[]} longform    canonical 的 longform.ndjson
  * @param {object[]} broadcasts  canonical 的 broadcasts.ndjson
+ * @param {object[]} doulists    canonical 的 doulists.ndjson
  */
-export function project({ marks = [], subjects = [], longform = [], broadcasts = [] }) {
+export function project({ marks = [], subjects = [], longform = [], broadcasts = [], doulists = [] }) {
   const bySubject = new Map();
   for (const s of subjects) bySubject.set(`${s.medium}:${s.id}`, s);
 
@@ -34,6 +35,7 @@ export function project({ marks = [], subjects = [], longform = [], broadcasts =
   return {
     marks: projectedMarks,
     longform: longform.map(projectLongform),
+    doulists: doulists.map(projectDoulist),
     broadcasts: broadcasts.map((b) => projectBroadcast(b, targetIndex(projectedMarks))),
   };
 }
@@ -323,6 +325,44 @@ function projectMark(m, subject, fromBroadcasts = []) {
 
     // 「什么时候 → 说了什么」。理由见 broadcastsBySubject。
     timeline: buildTimeline(m, fromBroadcasts),
+  };
+}
+
+/**
+ * 一份豆列。
+ *
+ * **`visibility` 一路传到底。** 它是用户在豆瓣上明确做过的一个选择，而生成出来的
+ * 站点是可以发布到 GitHub Pages 的。眼下渲染不据此过滤（档案主人的决定：先都渲
+ * 染出来，把「我们知道它是私密的」这件事显示出来），但那个事实必须**看得见**——
+ * 一份私密豆列渲染成和公开的一模一样，等于把这条信息从档案里抹掉。
+ *
+ * `unknown` 按 `private` 显示：抽取失败与「确实是公开的」不是一回事，而这一档
+ * 上说错话的代价是不对称的。
+ */
+function projectDoulist(rec) {
+  const r = latest(rec);
+  const cat = rec.catalog ?? {};
+  return {
+    id: rec.upstream_id,
+    url: rec.url ?? null,
+    title: r.fields.title ?? null,
+    description: r.fields.description ?? null,
+    visibility: r.fields.visibility ?? 'unknown',
+    ownership: rec.ownership ?? 'created',
+    revisionCount: rec.revisions.length,
+    lastSeenAt: r.last_observed_at,
+    items: (r.fields.items ?? []).map((i) => ({
+      entryId: i.entry_id,
+      upstreamId: i.upstream_id,
+      category: i.category,
+      url: i.url ?? null,
+      title: i.title ?? null,
+      comment: i.comment ?? null,
+      // 目录数据不在摘要里，另存的那份拿来渲染。
+      abstract: cat[i.entry_id]?.abstract ?? null,
+      rating: cat[i.entry_id]?.rating ?? null,
+      coverUrl: cat[i.entry_id]?.cover_url ?? null,
+    })),
   };
 }
 

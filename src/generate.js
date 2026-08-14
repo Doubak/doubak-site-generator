@@ -20,7 +20,7 @@ import { join, dirname } from 'node:path';
 
 import { project, groupMarks } from './projection.js';
 import {
-  markPage, longformPage, markPath, longformPath, verb,
+  markPage, longformPage, markPath, longformPath, doulistPage, doulistPath, verb,
   broadcastMonthPage, broadcastMonthPath, monthOf,
   markFilterPath, markFilterPage, broadcastBlock, plainText, coverStripItem,
   sectionIndexPath, sectionIndexPage,
@@ -34,12 +34,12 @@ const MEDIUM_NAMES = {
   movie: '影视', book: '书', music: '音乐', game: '游戏', drama: '舞台剧',
   // 首页把广播与长文也当成小节来排，所以这三个名字也在这儿。
   // 主题那边 `hugo.toml` 的 `[params.mediumNames]` 是同一份，测试钉着两处相等。
-  broadcast: '广播', note: '日记', review: '评论',
+  broadcast: '广播', note: '日记', review: '评论', doulist: '豆列',
 };
 
 /**
  * @param {object} opts
- * @param {{marks: object[], subjects: object[], longform: object[], broadcasts: object[]}} opts.canonical
+ * @param {{marks: object[], subjects: object[], longform: object[], broadcasts: object[], doulists?: object[]}} opts.canonical
  * @param {string} [opts.bundlesDir] 有它才导出图片
  * @param {string} opts.outDir
  * @param {boolean} [opts.clean] 先清空产出目录，默认 true
@@ -164,10 +164,16 @@ export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir
 
   // 广播 / 日记 / 评论各自的小节页。**首页那句「看全部 →」要有文件可链**——
   // 没有这个文件时 Hugo 会造一个空小节页，而 Markdown 里链不到一个不存在的文件。
+  // 豆列。私密的照常渲染，但页面上带锁——见 markdown.js 的 doulistPage。
+  for (const r of p.doulists ?? []) {
+    files.push([join('content', doulistPath(r)), doulistPage(r)]);
+  }
+
   for (const [section, has] of [
     ['broadcast', p.broadcasts.length > 0],
     ['note', p.longform.some((r) => r.kind === 'note')],
     ['review', p.longform.some((r) => r.kind === 'review')],
+    ['doulist', (p.doulists ?? []).length > 0],
   ]) {
     if (has) {
       files.push([join('content', sectionIndexPath(section)),
@@ -206,6 +212,7 @@ export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir
     pages: files.length,
     marks: p.marks.length,
     longform: p.longform.length,
+    doulists: (p.doulists ?? []).length,
     broadcasts: p.broadcasts.length,
     broadcastMonths: byMonth.size,
     searchRows: search.rows.length,
@@ -235,7 +242,7 @@ export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir
  * 不按字母序：广播是这份存档里最不可替代的一条（发布即冻结、可被静默删除），排第一；
  * 日记与评论只有个位数，排后面。
  */
-const SECTION_ORDER = ['broadcast', 'book', 'movie', 'game', 'music', 'drama', 'note', 'review'];
+const SECTION_ORDER = ['broadcast', 'book', 'movie', 'game', 'music', 'drama', 'note', 'review', 'doulist'];
 
 /**
  * 标记状态在页面上的先后。

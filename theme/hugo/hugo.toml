@@ -63,7 +63,7 @@ disableKinds = ['rss', 'sitemap']
   #
   # 名单之外的小节**不会被丢掉**，会按字母序接在后面（见 baseof.html）——
   # 一张写死的清单如果能让新加的小节从导航上消失，那它迟早会。
-  sectionOrder = ['broadcast', 'book', 'movie', 'game', 'music', 'drama', 'note', 'review']
+  sectionOrder = ['broadcast', 'book', 'movie', 'game', 'music', 'drama', 'note', 'review', 'doulist']
 
   # 媒介的中文名。豆瓣的动词跟着媒介走，「看过一本书」是错的说法。
   [params.mediumNames]
@@ -75,3 +75,4 @@ disableKinds = ['rss', 'sitemap']
     note = '日记'
     review = '评论'
     broadcast = '广播'
+    doulist = '豆列'

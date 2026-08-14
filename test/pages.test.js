@@ -1116,7 +1116,7 @@ describe('Hugo 骨架', () => {
     assert.ok(m, 'hugo.toml 里该有 sectionOrder');
     const order = m[1].split(',').map((x) => x.trim().replace(/'/g, ''));
     assert.deepEqual(order,
-      ['broadcast', 'book', 'movie', 'game', 'music', 'drama', 'note', 'review']);
+      ['broadcast', 'book', 'movie', 'game', 'music', 'drama', 'note', 'review', 'doulist']);
 
     const p = readFileSync(join(THEME, 'layouts/partials/sections.html'), 'utf-8');
     assert.match(p, /if not \(in \$want \.Section\)/, '名单之外的小节要接在后面，不能丢');
