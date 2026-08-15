@@ -163,6 +163,8 @@ npm run deploy -- <canonical> <bundles> <仓库目录>             # 再真铺
 
 活的例子：[sample.doubak.com](https://sample.doubak.com)（[仓库](https://github.com/Doubak/doubak-site-generator-sample)）。
 
+生成站点不是 canonical 唯一的去处，另一条是 [`doubak-export-adapters`](https://github.com/Doubak/doubak-export-adapters)：同一份 canonical 产出 NeoDB / Letterboxd / Goodreads 的导入文件。两条路互不依赖，也互不影响 —— 都是对 canonical 的只读消费。
+
 ## 列表页与链接
 
 **每个板块都是分页的列表，不是一次铺完。** 影视 2102 条，一页两千多张图谁也打不开。分页之后状态退成每张卡片上的一个词，另在顶上给一排筛选片 —— 片上的数是**在整个板块上算的，不是当前页**：一个会随翻页而变的计数比没有计数更糟，它看起来是个事实。
