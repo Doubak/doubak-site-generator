@@ -23,14 +23,19 @@
 <p id="stat" class="dim"></p>
 <div id="out"></div>
 
-<style>/* 搜索页专用，其余在 site.css */
+<style>/* 搜索页专用，其余在 site.css。
+   **变量名只能用 site.css 里定义过的那些。** 这里曾经写着 --accent / --dim / --fg
+   三个根本不存在的名字：var() 取不到值时，这条声明是「在计算值这一步作废」，
+   浏览器不报错、控制台不出声，只是当作没写。于是 mark 的底色变成透明、
+   字色是白的，高亮命中的那几个字**在白底上彻底看不见**。
+   test/theme-vars.test.js 现在会拦住这一类。 */
 .searchbox { margin: 1.4rem 0 .6rem; }
 #q {
   width: 100%; padding: .6rem .8rem; font: inherit;
-  background: var(--bg); color: var(--fg);
+  background: var(--bg); color: var(--text);
   border: 1px solid var(--line); border-radius: 4px;
 }
-#q:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+#q:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
 #q:disabled { opacity: .6; }
 .idx { display: flex; align-items: center; gap: .5rem; margin: .5rem 0 0; font-size: .85rem; }
 .idx .bar {
@@ -39,17 +44,17 @@
 }
 .idx-loading .bar { display: inline-block; }
 .idx-loading .bar span {
-  display: block; width: 40%; height: 100%; background: var(--accent);
+  display: block; width: 40%; height: 100%; background: var(--brand);
   animation: slide 1.1s ease-in-out infinite;
 }
 @keyframes slide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
-.idx-ready::before { content: "✓"; color: var(--accent); font-weight: 600; }
+.idx-ready::before { content: "✓"; color: var(--brand); font-weight: 600; }
 .idx-error::before { content: "⚠"; }
 .hit { border-top: 1px solid var(--line); padding: .9rem 0; }
 .hit a { text-decoration: none; font-weight: 600; }
-.hit .meta { font-size: .82rem; color: var(--dim); margin-top: .15rem; }
+.hit .meta { font-size: .82rem; color: var(--text-dim); margin-top: .15rem; }
 .hit .snip { margin-top: .35rem; }
-.hit mark { background: var(--accent); color: var(--bg); border-radius: 2px; padding: 0 .1em; }
+.hit mark { background: var(--hl); color: var(--hl-text); border-radius: 2px; padding: 0 .1em; }
 </style>
 
 <script>
