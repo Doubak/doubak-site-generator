@@ -8,3 +8,7 @@ node_modules/
 
 # 部署时的暂存目录
 .deploy-stage/
+
+# 覆盖率的中间产物，CI 里生成，不进仓库
+lcov.info
+coveralls.json
