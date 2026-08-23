@@ -85,17 +85,45 @@ describe('主题的 CSS 变量', () => {
   });
 
   test('**高亮的底色和字色必须是一对** —— 底色借了别处、字色写死，就是白底白字', () => {
-    const html = readFileSync(join(THEME, 'layouts/_default/search.html'), 'utf-8');
-    // 用 assert.ok 而不是 assert.match：后者失败时会把整个模板打进报告里，
+    // 用 assert.ok 而不是 assert.match：后者失败时会把整个文件打进报告里，
     // 于是真正的那一行被埋在几百行输出中间。
     assert.ok(
-      /\.hit mark \{ background: var\(--hl\); color: var\(--hl-text\);/.test(html),
+      /\.hit mark \{ background: var\(--hl\); color: var\(--hl-text\);/.test(css),
       '命中高亮必须同时取 --hl 与 --hl-text',
     );
     // 出事的那一版写的是 color: var(--bg)：浅色模式下就是白字。
     assert.ok(
-      !/\.hit mark \{[^}]*color: var\(--bg\)/.test(html),
+      !/\.hit mark \{[^}]*color: var\(--bg\)/.test(css),
       '字色不能取 --bg —— 那是页面底色',
     );
+    // 也不能写死：#1a1c1a 在深色模式下是黑字压深黄底。
+    assert.ok(
+      !/\.hit mark \{[^}]*color: #/.test(css),
+      '字色不能写死颜色 —— 深浅两套模式得各取各的',
+    );
+  });
+
+  test('**搜索页的样式只有一份** —— 两份同名选择器会交织，而模板里那份会漂', () => {
+    // 曾经 site.css 与 search.html 的内联 <style> 各有一份 .hit / #q / .idx，
+    // 内联那份在文档顺序上靠后。页面上生效的既不是任何一份，而是两份交织的
+    // 结果：#q 的圆角来自内联、字号来自 site.css。命中高亮整段隐形那次，
+    // 出错的正是模板里那份——没人会去模板里找样式。
+    const templates = FILES.filter((f) => f.endsWith('.html'));
+    assert.ok(templates.length >= 5, `只扫到 ${templates.length} 个模板，路径大概错了`);
+
+    const offenders = [];
+    for (const file of templates) {
+      const text = readFileSync(file, 'utf-8');
+      // 真的内联样式才算：只写了 <style> 四个字的注释不算。
+      const a = text.indexOf('<style>');
+      const b = text.indexOf('</style>');
+      if (a >= 0 && b > a) offenders.push(`${relative(THEME, file)}: 内联 <style>`);
+    }
+    assert.deepEqual(offenders, [], `样式要写在 site.css 里：\n  ${offenders.join('\n  ')}`);
+
+    // 这条检查得确认自己真的看见了那些选择器，否则 site.css 被清空也照样绿。
+    for (const sel of ['.hit mark', '#q:focus', '.idx-loading .bar']) {
+      assert.ok(css.includes(sel), `site.css 里找不到 ${sel}，样式没搬全`);
+    }
   });
 });

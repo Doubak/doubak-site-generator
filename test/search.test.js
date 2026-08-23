@@ -147,8 +147,23 @@ describe('搜索页', () => {
 
   test('**先转义再插高亮标记** —— 顺序反了就是个 XSS', () => {
     // 用户写的字里有尖括号很正常（实测「From <May December>」）。
-    const snip = html.slice(html.indexOf('function snippet'), html.indexOf('function run'));
-    assert.match(snip, /esc\(s\.slice\(0, j\)\) \+ '<mark>' \+ esc\(/);
+    // 不按字符位置切源码去查其中一处：多加一个高亮函数就会漏掉新的那个，
+    // 而漏掉的那次正是没人看的那次。这里查的是**每一处** <mark> 插入点。
+    const inserts = html.match(/'<mark>'[^\n]*/g) || [];
+    assert.ok(inserts.length >= 2, `<mark> 插入点只找到 ${inserts.length} 处，正则八成失效了`);
+    for (const line of inserts) assert.match(line, /^'<mark>' \+ esc\(/);
+  });
+
+  test('**标题命中也要高亮** —— 整串标，不截断', () => {
+    // 命中在标题时曾经只有正文那行是黄的，标题一片素白，看着像没命中。
+    assert.match(html, /function highlight\(text, lq\)/);
+    assert.match(html, /var titleHtml = d\.n \? highlight\(d\.n, lq\) : esc\(title\)/);
+    assert.match(html, /'\.html">' \+ titleHtml/);
+  });
+
+  test('**占位标题不高亮** —— 占位符不是内容', () => {
+    // 「广播」「未知作品」是没标题时填的字，搜它们时标黄等于说标题命中了。
+    assert.ok(!/highlight\(title/.test(html), '高亮的必须是 d.n，不是回退后的 title');
   });
 
   test('**又名与标题同一档** —— 搜台译名和搜大陆译名该是一样的', () => {
@@ -158,5 +173,47 @@ describe('搜索页', () => {
 
   test('零结果就说零结果', () => {
     assert.match(html, /没有找到/);
+  });
+});
+
+describe('高亮函数（从模板里抠出来真跑一遍）', () => {
+  // 只比对源码的话，「先转义再插标记」顺序写对了、下标切错了，照样过——
+  // 而那种错是渲染出来才看得见的。所以这里把函数拿出来跑真的输入。
+  // 按函数名切，不按行号：真被挪走了，new Function 会当场炸，不会默默变绿。
+  const html = readFileSync(join(THEME, 'layouts/_default/search.html'), 'utf-8');
+  const from = html.indexOf('function esc(');
+  const to = html.indexOf('function run(');
+  assert.ok(from > 0 && to > from, '模板里的函数挪位置了，抠不出来');
+  const src = html.slice(from, to);
+  assert.ok(src.length > 400, `只抠到 ${src.length} 个字符，切法失效了`);
+  const { highlight } = new Function(`${src}; return { highlight: highlight };`)();
+
+  test('命中处包上 <mark>', () => {
+    assert.equal(highlight('寂静岭2', '寂静岭'), '<mark>寂静岭</mark>2');
+  });
+
+  test('**全部命中都标**，不只第一处', () => {
+    assert.equal(highlight('寂静岭2 寂静岭', '寂静岭'),
+      '<mark>寂静岭</mark>2 <mark>寂静岭</mark>');
+  });
+
+  test('大小写不敏感，且保留原文的大小写', () => {
+    assert.equal(highlight('May December', 'may'), '<mark>May</mark> December');
+  });
+
+  test('没命中就原样返回', () => {
+    assert.equal(highlight('盗梦空间', '寂静岭'), '盗梦空间');
+  });
+
+  test('**尖括号先转义，再插标记** —— 实测标题「From <May December>」', () => {
+    // 反过来的话 <mark> 自己也会被转义掉，或者用户的尖括号变成真标签。
+    assert.equal(highlight('From <May December>', 'may'),
+      'From &lt;<mark>May</mark> December&gt;');
+    assert.equal(highlight('<img src=x onerror=alert(1)>', 'img'),
+      '&lt;<mark>img</mark> src=x onerror=alert(1)&gt;');
+  });
+
+  test('空查询直接转义返回，不死循环', () => {
+    assert.equal(highlight('<a>', ''), '&lt;a&gt;');
   });
 });

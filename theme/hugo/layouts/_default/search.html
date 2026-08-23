@@ -23,39 +23,12 @@
 <p id="stat" class="dim"></p>
 <div id="out"></div>
 
-<style>/* 搜索页专用，其余在 site.css。
-   **变量名只能用 site.css 里定义过的那些。** 这里曾经写着 --accent / --dim / --fg
-   三个根本不存在的名字：var() 取不到值时，这条声明是「在计算值这一步作废」，
-   浏览器不报错、控制台不出声，只是当作没写。于是 mark 的底色变成透明、
-   字色是白的，高亮命中的那几个字**在白底上彻底看不见**。
-   test/theme-vars.test.js 现在会拦住这一类。 */
-.searchbox { margin: 1.4rem 0 .6rem; }
-#q {
-  width: 100%; padding: .6rem .8rem; font: inherit;
-  background: var(--bg); color: var(--text);
-  border: 1px solid var(--line); border-radius: 4px;
-}
-#q:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
-#q:disabled { opacity: .6; }
-.idx { display: flex; align-items: center; gap: .5rem; margin: .5rem 0 0; font-size: .85rem; }
-.idx .bar {
-  display: none; width: 7rem; height: 3px; border-radius: 2px;
-  background: var(--line); overflow: hidden;
-}
-.idx-loading .bar { display: inline-block; }
-.idx-loading .bar span {
-  display: block; width: 40%; height: 100%; background: var(--brand);
-  animation: slide 1.1s ease-in-out infinite;
-}
-@keyframes slide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
-.idx-ready::before { content: "✓"; color: var(--brand); font-weight: 600; }
-.idx-error::before { content: "⚠"; }
-.hit { border-top: 1px solid var(--line); padding: .9rem 0; }
-.hit a { text-decoration: none; font-weight: 600; }
-.hit .meta { font-size: .82rem; color: var(--text-dim); margin-top: .15rem; }
-.hit .snip { margin-top: .35rem; }
-.hit mark { background: var(--hl); color: var(--hl-text); border-radius: 2px; padding: 0 .1em; }
-</style>
+{{/*
+  样式全在 site.css 的「搜索」一段里，**这里不再有内联 <style>**。
+  以前两处各有一份同名选择器，页面上生效的是两份交织的结果，而模板里那份
+  会悄悄漂：命中高亮曾经因此在白底上整段隐形（三个从没定义过的变量名）。
+  要改搜索页的样子，改 site.css。
+*/}}
 
 <script>
 (function () {
@@ -87,6 +60,20 @@
       + esc(s.slice(j + lq.length));
   }
 
+  // 标题整串高亮，**不开窗也不截断**。snippet() 只取命中前后 120 字，是因为
+  // 短评可能很长；标题截一半就成了另一个标题。也标出全部命中而不只第一处，
+  // 「寂静岭2 寂静岭」搜「寂静岭」时只亮前一个，看着像是漏了。
+  // 与 snippet() 同一条规矩：**先转义再插标记**，顺序反了就是个 XSS。
+  function highlight(text, lq) {
+    var s = String(text), lower = s.toLowerCase(), html = '', from = 0, i;
+    if (!lq) return esc(s);
+    while ((i = lower.indexOf(lq, from)) >= 0) {
+      html += esc(s.slice(from, i)) + '<mark>' + esc(s.slice(i, i + lq.length)) + '</mark>';
+      from = i + lq.length;
+    }
+    return html + esc(s.slice(from));
+  }
+
   function run() {
     var raw = q.value.trim();
     if (!rows || !raw) { out.innerHTML = ''; stat.textContent = ''; return; }
@@ -116,6 +103,10 @@
     for (var k = 0; k < Math.min(hits.length, 200); k++) {
       var h = hits[k], d = h.r;
       var title = d.n || (d.t === 'b' ? '广播' : '未知作品');
+      // **只高亮真的标题**。「广播」「未知作品」是没有标题时填的占位符，
+      // 不是这条记录里的字：搜「广播」时把它标黄，等于说这条的标题命中了，
+      // 而实际命中的是正文。占位符不是内容——同 raw_meta 里那几条一个道理。
+      var titleHtml = d.n ? highlight(d.n, lq) : esc(title);
       var where = KIND[d.t] + (d.k ? ' · ' + (NAMES[d.k] || d.k) : '');
       // 命中的是又名时要把又名显示出来，否则用户会以为搜错了。
       // 命中的是导演/类型这类信息时也要显示出来，理由与又名相同。
@@ -123,7 +114,7 @@
         ? '<div class="snip">' + snippet(d.w, lq) + '</div>' : '';
       var hitAlias = d.a && d.a.join(' ').toLowerCase().indexOf(lq) >= 0
         ? '<div class="snip">' + snippet(d.a.join(' / '), lq) + '</div>' : '';
-      html += '<div class="hit"><a href="' + esc(d.u) + '.html">' + esc(title) + '</a>'
+      html += '<div class="hit"><a href="' + esc(d.u) + '.html">' + titleHtml + '</a>'
         + '<div class="meta">' + esc(where) + (d.d ? ' · ' + esc(d.d) : '') + '</div>'
         + hitAlias
         + hitInfo
