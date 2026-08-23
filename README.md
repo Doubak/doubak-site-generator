@@ -1,5 +1,7 @@
 # doubak-site-generator
 
+[![test](https://github.com/Doubak/doubak-site-generator/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/Doubak/doubak-site-generator/actions/workflows/test.yml?query=branch%3Amain)
+
 > **这是源码仓库。** 项目主页在 **<https://doubak.com>**，生成出来的样子见
 > **<https://sample.doubak.com>**。
 
