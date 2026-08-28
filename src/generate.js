@@ -25,7 +25,7 @@ import {
   markFilterPath, markFilterPage, broadcastBlock, plainText, coverStripItem,
   sectionIndexPath, sectionIndexPage,
 } from './markdown.js';
-import { indexImages, exportImages } from './images.js';
+import { indexImages, exportImages, reallyMissing } from './images.js';
 import { buildSearchIndex } from './search.js';
 import { frontMatter } from './yaml.js';import { buildPages } from './pages.js';
 
@@ -85,7 +85,7 @@ export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir
       //
       // 这一条与上面那条是同一个意思：**告警要么是真的，要么就不该出现。**
       // 一条永远在的假告警会让真的那条也被忽略。
-      missing: res.missing.filter((u) => !coveredUrls.has(u) && !/\/(cuphead|f)\//.test(u)),
+      missing: res.missing.filter((u) => reallyMissing(u, coveredUrls)),
       // 下面那一轮页面生成时填。
       remote: [],
     };

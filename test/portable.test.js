@@ -31,9 +31,9 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
  * 扩展要拿走的入口。**改这张表就是在改跨仓库的契约**——扩展那边
  * `tools/sync-vendor.mjs` 有一份对应的名单。
  */
-const PORTABLE_ENTRIES = ['pages.js'];
+const PORTABLE_ENTRIES = ['pages.js', 'image-index.js'];
 
-test('pages.js 及其传递依赖都不 import node: 内建模块', async () => {
+test('pages.js / image-index.js 及其传递依赖都不 import node: 内建模块', async () => {
   const seen = new Set();
   const queue = PORTABLE_ENTRIES.map((e) => resolve(SRC, e));
   const bad = [];
@@ -64,4 +64,12 @@ test('generate.js 仍然是那个做 I/O 的，没把逻辑收回去', async () 
   assert.match(gen, /from '\.\/pages\.js'/, 'generate.js 必须用 pages.js 排页面');
   assert.ok(!/function homePage/.test(gen), '首页又被抄回 generate.js 了');
   assert.ok(!/const SECTION_ORDER/.test(gen), '小节顺序又被抄回 generate.js 了');
+});
+
+test('images.js 只剩读字节，判定在 image-index.js 里', async () => {
+  // 「哪张图是哪张」曾经和「怎么把它读出来」搅在一起。扩展要的是前者：
+  // 只按 URL 找封面会漏掉 95 张明明就在档案里的图，而那条判定必须两边一致。
+  const img = await readFile(join(SRC, 'images.js'), 'utf-8');
+  assert.match(img, /from '\.\/image-index\.js'/);
+  assert.ok(!/const m = \/\(\?:\\\/subject/.test(img), 'subjectIdOf 又被抄回 images.js 了');
 });

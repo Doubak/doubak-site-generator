@@ -19,6 +19,11 @@
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { join, dirname } from 'node:path';
+import {
+  buildImageIndex, fileNameFor, subdirFor, reallyMissing,
+} from './image-index.js';
+
+export { fileNameFor, reallyMissing };
 
 const SEP = '\r\n\r\n';
 
@@ -31,30 +36,7 @@ const SEP = '\r\n\r\n';
  * @param {string} root 装着一堆 bundle 的目录
  */
 export function indexImages(root) {
-  /** @type {Map<string, {dir: string, row: object}>} */
-  const out = new Map();
-  /**
-   * 作品 id → 那张封面。
-   *
-   * ## 为什么不能只按 URL 找
-   *
-   * canonical 里的 `cover_url` 取自**列表页的缩略图**，而档案里存的是**详情页的
-   * 封面**——多数媒介两者恰好是同一个文件，但不是全部。实测舞台剧：
-   *
-   *     列表页  …/pview/drama_subject_poster/small/public/561e90f2.jpg
-   *     详情页  …/pview/drama_subject_poster/m/public/561e90f2.jpg
-   *
-   * 只按 URL 找的话，这类封面全部落空——实测 95 张，而它们**明明就在档案里**。
-   *
-   * 所以再建一张按作品 id 的表。id 从封面那条记录的 parent（作品详情页）的 URL 上
-   * 取——那条边正是为「整张抓取图可以离线重建」而存在的（规范 §6.2），这里是它
-   * 第一次被真的用上。
-   * @type {Map<string, {dir: string, row: object}>}
-   */
-  const bySubject = new Map();
-  /** capture_id → 那条记录的 URL，用来把封面接回它的作品详情页。 */
-  const captureUrl = new Map();
-
+  const bundles = [];
   for (const name of readdirSync(root)) {
     const dir = join(root, name);
     let idxName;
@@ -62,51 +44,20 @@ export function indexImages(root) {
       idxName = readdirSync(dir).find((f) => f.startsWith('index-') && f.endsWith('.ndjson'));
     } catch { continue; }
     if (!idxName) continue;
-
+    const rows = [];
     for (const line of readFileSync(join(dir, idxName), 'utf-8').split('\n')) {
-      if (!line.trim()) continue;
-      const row = JSON.parse(line);
-      if (row.verdict !== 'ok') continue;
-      if (row.intent === 'interest.item') { captureUrl.set(row.capture_id, row.url); continue; }
-      if (row.surface !== 'asset') continue;
-      // 同一张图可能在多份档案里都有。**留最新的那条**——它们字节相同（sha256 会
-      // 证明），但取新的能少读一个旧的大段文件。
-      out.set(row.url, { dir, row });
-
-      if (row.route_key === 'asset.subject_cover' && row.parent_capture_id) {
-        const id = subjectIdOf(captureUrl.get(row.parent_capture_id) ?? '');
-        if (id) bySubject.set(id, { dir, row });
-      }
+      if (line.trim()) rows.push(JSON.parse(line));
     }
+    bundles.push({ host: dir, rows });
   }
-  return { byUrl: out, bySubject };
+  // 判定在 image-index.js 里——那是个纯函数，扩展也在用同一份。
+  // 这里只做它做不了的事：把 index 从盘上读出来。
+  const { byUrl, bySubject } = buildImageIndex(bundles);
+  // 结果里的 `host` 就是目录名，下游按 `hit.dir` 用，所以在这儿改回来。
+  const rename = (m) => new Map([...m].map(([k, v]) => [k, { dir: v.host, row: v.row }]));
+  return { byUrl: rename(byUrl), bySubject: rename(bySubject) };
 }
 
-/** 从作品详情页的 URL 里取 id。五种媒介五种形状，与抓取那边同一套。 */
-function subjectIdOf(url) {
-  const m = /(?:\/subject\/|douban\.com\/(?:game|app)\/|\/location\/drama\/)(\d+)/.exec(url);
-  return m ? m[1] : null;
-}
-
-/** 从 Content-Type 推一个扩展名。认不出来就用 .bin —— 不猜。 */
-function extOf(contentType) {
-  const ct = (contentType ?? '').split(';')[0].trim().toLowerCase();
-  return { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp' }[ct] ?? '.bin';
-}
-
-/**
- * 文件名取 URL 的最后一段。
- *
- * 豆瓣的图片名本来就是内容哈希一样的东西（`p742323977.jpg`、`b79771d06053dd7.jpg`），
- * 天然唯一且稳定。**不重新编号**：重新生成之后文件名不变，站点的链接才不会全变。
- *
- * @param {string} url
- */
-export function fileNameFor(url, contentType) {
-  const base = url.split('?')[0].split('/').pop() || 'image';
-  const clean = base.replace(/[^A-Za-z0-9._-]/g, '_');
-  return /\.[A-Za-z0-9]{2,5}$/.test(clean) ? clean : clean + extOf(contentType);
-}
 
 /**
  * 段文件缓存。
@@ -169,7 +120,7 @@ export function exportImages({ index, wanted, wantedBySubject = new Map(), outDi
   let written = 0;
 
   const write = (hit) => {
-    const sub = hit.row.route_key === 'asset.subject_cover' ? 'covers' : 'uploads';
+    const sub = subdirFor(hit.row);
     const rel = `${sub}/${fileNameFor(hit.row.url, hit.row.content_type)}`;
     const abs = join(outDir, rel);
     if (!existsSync(abs)) {
