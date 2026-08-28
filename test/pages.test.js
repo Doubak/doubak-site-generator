@@ -495,9 +495,12 @@ describe('按状态筛选', () => {
 
   test('**首页小节的顺序与页眉导航同一份**', () => {
     // 两处对不上比顺序不对更难发现：一处改了另一处没改，页面上看着都「有道理」。
-    const gen = readFileSync('src/generate.js', 'utf-8');
+    // 常量在 pages.js 里 —— 排页面那一段是纯函数，扩展也在用同一份。
+    const gen = readFileSync('src/pages.js', 'utf-8');
     const toml = readFileSync(join(THEME_DIR, 'hugo.toml'), 'utf-8');
-    const inGen = /const SECTION_ORDER = \[([^\]]*)\]/.exec(gen)[1]
+    const found = /const SECTION_ORDER = \[([^\]]*)\]/.exec(gen);
+    assert.ok(found, 'src/pages.js 里没找到 SECTION_ORDER —— 常量挪了地方，这条检查会变成空跑');
+    const inGen = found[1]
       .split(',').map((x) => x.trim().replace(/'/g, '')).filter(Boolean);
     const inToml = /sectionOrder = \[([^\]]*)\]/.exec(toml)[1]
       .split(',').map((x) => x.trim().replace(/'/g, '')).filter(Boolean);
@@ -508,7 +511,7 @@ describe('按状态筛选', () => {
   test('**状态按 想看 → 在看 → 看过 排**，不按字母序', () => {
     // 字母序（doing/done/wish）读出来是「在看、看过、想看」——那是把内部标识的
     // 排序当成了人的顺序。首页与筛选片两处都得是这个次序。
-    const gen = readFileSync('src/generate.js', 'utf-8');
+    const gen = readFileSync('src/pages.js', 'utf-8');
     assert.match(gen, /const STATUS_ORDER = \['wish', 'doing', 'done'\]/);
     const chips = readFileSync(join(THEME_DIR, 'layouts/partials/statuschips.html'), 'utf-8');
     assert.match(chips, /slice "wish" "doing" "done"/);
