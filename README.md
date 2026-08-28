@@ -115,6 +115,33 @@ npm 上那些 `hugo-bin` 之类的包做的恰好就是这件事——下载官�
 
 它刻意只有五个文件，**就是为了让你删掉它**。换成任何一个现成的 Hugo 主题：删掉 `layouts/`，照那个主题的说明配置，`content/` 与 `static/` 一个字都不用动。
 
+## 浏览器扩展里也能出这棵树
+
+不想装 Node 的话，豆备扩展的「导出」页当场就出同一棵 Markdown 树（图片一并导出）。
+用的是这里的同一份代码：`pages.js` / `projection.js` / `markdown.js` / `search.js` /
+`yaml.js` / `image-index.js` 逐字节拷进扩展的 `src/vendor/site-generator/`，
+`tools/sync-vendor.mjs --check` 由两边的 CI 守着。
+
+为此把两块**纯计算**从做 I/O 的文件里拆了出来，界线是「字节从哪儿来、往哪儿去各写
+各的，内容长什么样只有一份」：
+
+| 拆出来的 | 原来在哪 | 做什么 |
+|---|---|---|
+| `pages.js` | `generate.js` | 把投影排成一棵页面树（首页、月页、筛选页、小节页、豆列页、搜索索引），连同 `MEDIUM_NAMES` / `SECTION_ORDER` / `STATUS_ORDER` |
+| `image-index.js` | `images.js` | 「哪张图是哪张、叫什么名字、算不算缺」 |
+
+`generate.js` 只剩它做不了的两件事：把图片字节从 WARC 里搬出来，把文本写到盘上。
+图片路径是**传进来的**（`images` / `coverBySubject` 两张表），所以 `pages.js` 不需要
+知道图片是从文件系统来的还是从 OPFS 来的。
+
+**这次拆分不是洁癖**：不拆的话扩展那边只能照着字段名重写一遍那套判定，而写出来的
+版本会按 `content_type` 而不是 `surface` 筛、按一个根本不存在的 `parent_url` 找作品
+id、同名图留最早那份而不是最新那份——三处全错，三处都不报错，出来的两个站点打开都
+很正常，只是图片路径不同。
+
+`test/portable.test.js` 守着这两个入口连同传递依赖都不碰内建模块，并且反向钉一条：
+排页面的代码不许被抄回 `generate.js`。
+
 ## 用别的静态站生成器
 
 ```sh
