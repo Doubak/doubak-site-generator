@@ -121,11 +121,32 @@ describe('页面', () => {
     assert.match(markPage(p), /douban_meta: "2024 \/ 导演"/);
   });
 
-  test('导出到本地的封面优先于 doubanio 的 URL', () => {
-    // 不导出的话，这份备份要联网、而且要豆瓣还在才看得见图。
+  test('**封面接不回本地就不写，绝不回退到 doubanio 的 URL**', () => {
+    // 这一条原来断言的正好相反——没有本地封面时保留 doubanio 的 URL。而它下面
+    // 紧挨着的那条测试的注释里写的是：「原样带过去的话，页面上会留一个指向
+    // doubanio 的 URL——让一份号称离线可看的备份，为了一张本来就不存在的图去
+    // 联网」。**两条相邻的测试，结论正好相反**，而错的是上面这条。
+    //
+    // 它一直没出事，只因为扩展抓的档案里封面字节总是在。接进 2022–2024 那批
+    // 老档案之后就出事了：老工具一张图都没存，于是 5 个只在老档案里的作品把
+    // doubanio 的地址印到了 15 个页面上（上一版是 0 个），而那些页面的页脚
+    // 同时写着「这个页面也不发一个外部请求」。
     const [p] = project({ marks: [mark()], subjects: [subject()] }).marks;
     assert.match(markPage(p, { coverPath: '/covers/x.jpg' }), /douban_cover: "\/covers\/x\.jpg"/);
-    assert.match(markPage(p), /douban_cover: "https:\/\/img1\.doubanio\.com/);
+    assert.match(markPage(p), /^douban_cover: null$/m);
+  });
+
+  test('**整个产出里一个 doubanio 的图片地址都不许有**', () => {
+    // 上面那条按字段查，这条按产物查——`markPage` 修好了，别的页面类型还可能
+    // 从别处漏出去。判据是那句印在每一页页脚上的话：「这个页面也不发一个外部请求」。
+    //
+    // 广播附图不在此列，那是**另一个刻意的取舍**（见 broadcastBlock 里的注释：
+    // 用户自己传的图，留一个 URL 至少说明「这儿本来有图」）——所以这里只查封面
+    // 与列表页，并且把那个例外显式写出来，而不是让它悄悄混进来。
+    const [p] = project({ marks: [mark()], subjects: [subject()] }).marks;
+    for (const page of [markPage(p), markPage(p, { coverPath: null })]) {
+      assert.doesNotMatch(page, /doubanio\.com/, '封面漏了一个远程地址出去');
+    }
   });
 
   test('**豆瓣的「暂无封面」占位图当成没有封面**', () => {
