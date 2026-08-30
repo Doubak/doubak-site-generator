@@ -734,10 +734,44 @@ describe('广播', () => {
       },
       outDir: out,
     });
-    assert.ok(r.images.remote.includes('https://img1.doubanio.com/x.jpg'), '封面该被数进去');
     assert.ok(r.images.remote.includes('https://img1.doubanio.com/x/p1.jpg'), '广播附图该被数进去');
+    // **封面【不】算进去。** 这一行原来断言的正好相反，而它自从封面那个回归被
+    // 修好之后就一直在钉着一句假话：`markPage()` 现在取不到本地封面就什么都不写，
+    // 所以那个 URL 根本没留在页面上。一条说「页面上留的是 doubanio 的地址」的
+    // 告警，把一个并没有留在页面上的东西数了进去。
+    //
+    // 没有本地封面照样会被报，走的是 `missing`——那才是它的性质。
+    assert.ok(
+      !r.images.remote.includes('https://img1.doubanio.com/x.jpg'),
+      '封面没导出成本地时页面上是【没有封面】，不是留了个远程地址',
+    );
     // 去重：同一张图出现在多处只算一次，否则这个数会比真实张数大。
     assert.equal(r.images.remote.length, new Set(r.images.remote).size);
+  });
+
+  test('**产出里一个 doubanio 的封面地址都不许有** —— 与上一条是同一件事的两面', () => {
+    // 上一条断言的是「数字里没有它」，这一条断言的是「页面上没有它」。两条都要：
+    // 只留前者的话，哪天封面又退回豆瓣的 URL，那个数字仍然是 0，而离线保证已经破了。
+    const out = mkdtempSync(join(tmpdir(), 'doubak-nocover-'));
+    const r = generate({
+      canonical: { marks: [mark()], subjects: [subject()], longform: [], broadcasts: [] },
+      outDir: out,
+    });
+    // **从盘上读，不读返回值。** `generate()` 不返回 files——第一版写成
+    // `for (const [rel, text] of r.files ?? [])`，那是个空循环，永远绿。
+    const md = [];
+    const walk = (d) => {
+      for (const e of readdirSync(d, { withFileTypes: true })) {
+        const abs = join(d, e.name);
+        if (e.isDirectory()) walk(abs);
+        else if (e.name.endsWith('.md')) md.push([abs, readFileSync(abs, 'utf-8')]);
+      }
+    };
+    walk(join(out, 'content'));
+    assert.ok(md.length > 0, `没扫到任何 .md，这条测试等于没跑（marks ${r.marks}）`);
+    for (const [abs, text] of md) {
+      assert.ok(!/douban_cover:.*doubanio/.test(text), `${abs} 里的 douban_cover 指向了 doubanio`);
+    }
   });
 
   test('图都在档案里时，这个数是 0 —— 判据不能永远为真', () => {
