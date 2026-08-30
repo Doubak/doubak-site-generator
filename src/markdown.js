@@ -483,11 +483,16 @@ export function broadcastBlock(b, { images = {}, covers = {}, linkPrefix = '../'
 export function broadcastMonthPage(month, list, { images = {}, covers = {} } = {}) {
   const sorted = [...list].sort((a, b) => (a.postedAt < b.postedAt ? 1 : -1));
   const [y, m] = month.split('-');
+  const dated = month !== UNDATED;
 
   const fm = {
-    title: `${y}年${Number(m)}月`,
+    title: dated ? `${y}年${Number(m)}月` : '时间未知',
     // 月首，不是月内某条的时间——这一页代表的是整个月。
-    date: `${month}-01`,
+    //
+    // **没有时间的那一页不写这个字段，而不是编一个。** `undefined` 会被
+    // `frontMatter()` 整个跳过（`null` 才会写成 null），于是 Hugo 给这一页
+    // 零值日期，`.Pages.ByDate.Reverse` 把它排在最后——正是「时间未知」该在的位置。
+    date: dated ? `${month}-01` : undefined,
     douban_kind: 'broadcast_month',
     douban_month: month,
     douban_count: sorted.length,
@@ -509,6 +514,27 @@ export function broadcastMonthPath(month) {
 }
 
 /**
+ * 没有时间的那些广播归到哪个「月」。
+ *
+ * ## 这不是假想的情形
+ *
+ * 3411 条 2026 年抓到的广播全都带 `created_at`，所以这条路一直没人走过。而前代
+ * 工具 2014 年抓下来的档案里有一条 **「MewX 开始收听自己的豆瓣FM」**——豆瓣自己
+ * 用 `signature.html` 模板生成的动态，整个条目里**没有 `created_at`**，也没有
+ * 正文、没有评分。解析器如实记成 `posted_at: null`，那是对的。
+ *
+ * 而这里原来只有一个哨兵值、没有对应的处理：`'未知'.split('-')` 得到
+ * `['未知']`，于是 `Number(undefined)` 是 `NaN`，标题成了「未知年NaN月」，
+ * front matter 里写出 `date: "未知-01"`——**Hugo 直接整站构建失败**：
+ *
+ *     ERROR the "date" front matter field is not a parsable date
+ *
+ * 一条 2014 年的系统广播，让整个站点生成不出来。所以哨兵值必须是个常量，
+ * 而且每一个消费它的地方都要认得它。
+ */
+export const UNDATED = '未知';
+
+/**
  * 一条广播属于哪个月。
  *
  * 按**本地时间**切，不按 UTC。canonical 里的时间戳带 `+08:00`，用 UTC 切的话
@@ -517,7 +543,7 @@ export function broadcastMonthPath(month) {
  * @param {object} b
  */
 export function monthOf(b) {
-  return (b.postedAtRaw ?? b.postedAt ?? '').slice(0, 7) || '未知';
+  return (b.postedAtRaw ?? b.postedAt ?? '').slice(0, 7) || UNDATED;
 }
 
 /**

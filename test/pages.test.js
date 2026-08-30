@@ -20,7 +20,7 @@ const THEME_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'theme', '
 import { project, groupMarks } from '../src/projection.js';
 import {
   markPage, longformPage, doulistPage, markPath, longformPath, verb,
-  broadcastMonthPage, broadcastMonthPath, monthOf, plainText,
+  broadcastMonthPage, broadcastMonthPath, monthOf, plainText, UNDATED,
   markFilterPath, markFilterPage, mdTitleAttr, coverStripItem,
 } from '../src/markdown.js';
 
@@ -565,6 +565,34 @@ describe('广播', () => {
     assert.ok(text.indexOf('晚') < text.indexOf('早'), '月内应当倒序');
     assert.match(text, /^title: "2021年11月"$/m);
     assert.equal(broadcastMonthPath('2021-11'), 'broadcast/2021-11.md');
+  });
+
+  test('**没有时间的广播不能编一个日期出来** —— 编了会让 Hugo 整站构建失败', () => {
+    // 3411 条 2026 年抓到的广播全都带时间，所以这条路一直没人走过。而前代工具
+    // 2014 年抓下来的档案里有一条「MewX 开始收听自己的豆瓣FM」——豆瓣自己生成的
+    // 系统动态，整条没有 created_at。解析器如实记成 posted_at: null。
+    //
+    // 原来的产出是 `title: "未知年NaN月"` 与 `date: "未知-01"`，而后者让 Hugo
+    // 报 `the "date" front matter field is not a parsable date` 并**中止整站构建**。
+    // 一条 2014 年的系统广播，让整个站点生成不出来。
+    assert.equal(monthOf({ postedAtRaw: null, postedAt: null }), UNDATED);
+
+    const text = broadcastMonthPage(UNDATED, [
+      { postedAtRaw: null, postedAt: null, text: null, images: [], action: '开始收听自己的豆瓣FM', target: null },
+    ]);
+    assert.match(text, /^title: "时间未知"$/m, '标题里不能出现 NaN');
+    assert.doesNotMatch(text, /NaN/);
+    // **整个字段不写，而不是写一个假日期。** frontMatter() 跳过 undefined，
+    // 于是 Hugo 给这一页零值日期，ByDate.Reverse 把它排在最后——正是它该在的位置。
+    assert.doesNotMatch(text, /^date:/m, '没有时间就不该有 date 字段');
+    // 内容照样要在：丢掉它才是真的损失。
+    assert.match(text, /开始收听自己的豆瓣FM/);
+
+    // 正常月份一个字都没变。
+    const ok = broadcastMonthPage('2021-11', [
+      { postedAtRaw: '2021-11-02 10:00:00', postedAt: '2021-11-02T10:00:00+08:00', text: '早', images: [], action: null, target: null },
+    ]);
+    assert.match(ok, /^date: 2021-11-01$/m);
   });
 
   test('**按本地时间切月，不按 UTC**', () => {
