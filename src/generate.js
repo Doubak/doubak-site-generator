@@ -47,7 +47,7 @@ export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir
   let paths = {};
   /** @type {Record<string, string>} 作品 id → 本地封面路径 */
   let coverBySubject = {};
-  let imageStats = { written: 0, missing: [] };
+  let imageStats = { written: 0, missing: [], unreadable: [] };
   if (bundlesDir) {
     const wanted = new Set();
     for (const m of p.marks) if (m.coverUrl) wanted.add(m.coverUrl);
@@ -86,6 +86,11 @@ export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir
       // 这一条与上面那条是同一个意思：**告警要么是真的，要么就不该出现。**
       // 一条永远在的假告警会让真的那条也被忽略。
       missing: res.missing.filter((u) => reallyMissing(u, coveredUrls)),
+      // **读不出来的一张都不筛。** 上面那两条筛选（按 id 找到了的、占位图）
+      // 说的都是「这不算缺」，而它们成立的前提是那张图**本来就不该在档案里**。
+      // 读不出来正好相反：它在档案里，只是坏了。任何筛选都会让一份正在腐坏的
+      // 档案看起来是干净的。
+      unreadable: res.unreadable,
       // 下面那一轮页面生成时填。
       remote: [],
     };

@@ -51,6 +51,26 @@ if (r.theme) {
 // 而这个项目存在的全部理由就是不再需要那个前提。
 //
 // 原来这里写的是「页面上会缺」，那句话是错的，而且错得让人以为已经知道后果了。
+// **档案里有、却取不出来的图。** 与「缺图」分开报，因为下一步动作正好相反：
+// 缺的要重抓，读不出来的重抓没用——豆瓣那边好好的，坏的是手上这份档案。
+//
+// 这里不让整趟生成失败（页面全都出来了，只是少几张图，与「缺图」同级），
+// 但**必须点名到捕获**：起因往往是某个 assets 段里几个字节坏了，而解析器
+// 根本不打开图片行，所以它会一路安静地跑完——这条消息是整条链上唯一会提起
+// 这件事的地方。
+if (r.images.unreadable?.length) {
+  console.log(`\n⚠ 有 ${r.images.unreadable.length} 张图在档案里，但取不出来（段文件那一段解压不开）：`);
+  for (const u of r.images.unreadable.slice(0, 5)) {
+    console.log(`   ${u.captureId}  ${u.url}`);
+    console.log(`      ${u.dir}  —— ${u.error}`);
+  }
+  if (r.images.unreadable.length > 5) console.log(`   …另有 ${r.images.unreadable.length - 5} 张`);
+  console.log('  这不是抓漏了，是这份档案的字节坏了。重抓没有用，要做的是：');
+  console.log('    1. 拿原始拷贝重新解压 / 重新导入一次；');
+  console.log('    2. 跑一遍完整性检查，看还有没有别的地方也坏了：');
+  console.log('       node ../doubak-data-parser/bin/verify.js <bundle 目录>');
+}
+
 if (r.images.remote.length) {
   console.log(`\n⚠ 有 ${r.images.remote.length} 张图没能从档案里取到，页面上留的是 doubanio 的地址：`);
   for (const u of r.images.remote.slice(0, 5)) console.log('  ', u);

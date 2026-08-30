@@ -204,3 +204,178 @@ test('跑完要放掉段缓存', () => {
   // 不放掉的话它会一直挂着。
   releaseSegments();
 });
+
+describe('一个目录里塞了好几份档案', () => {
+  test('**有几份索引就读几份** —— 原来只读第一份，其余的图一张都取不到', () => {
+    // 真实形状：`~/downloads/old` 是个下载文件夹，10 份档案的索引与段文件平铺
+    // 在一起。只读第一份的话，另外 9 份的图全部取不到，而页面上只表现为
+    // 「有几张封面缺了」——解析器那边刚修的是同一个 bug，两边必须一起修，
+    // 否则 canonical 会引用一批本地根本没导出来的图。
+    const root = makeBundle([{
+      capture_id: 'a-1', url: 'https://img1.doubanio.com/x/first.jpg',
+      surface: 'asset', route_key: 'asset.upload', body: 'first',
+    }]);
+    // 往同一个 bundle 目录里再塞一份档案的索引与段（文件名不同，互不覆盖）。
+    const dir = join(root, 'bundle-a');
+    const body = Buffer.from('second');
+    const http = Buffer.concat([
+      Buffer.from('HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\n\r\n'), body,
+    ]);
+    const warc = Buffer.concat([
+      Buffer.from(`WARC/1.1\r\nWARC-Type: response\r\nContent-Length: ${http.length}\r\n\r\n`),
+      http,
+    ]);
+    const gz = gzipSync(warc);
+    writeFileSync(join(dir, 'seg-1.warc.gz'), gz);
+    writeFileSync(join(dir, 'index-1.ndjson'), JSON.stringify({
+      capture_id: 'b-1', url: 'https://img1.doubanio.com/x/second.jpg',
+      verdict: 'ok', surface: 'asset', route_key: 'asset.upload',
+      parent_capture_id: null, content_type: 'image/jpeg',
+      segment: 'seg-1.warc.gz', offset: 0, length: gz.length,
+    }) + '\n');
+
+    const index = indexImages(root);
+    assert.ok(index.byUrl.get('https://img1.doubanio.com/x/first.jpg'), '第一份要在');
+    assert.ok(
+      index.byUrl.get('https://img1.doubanio.com/x/second.jpg'),
+      '**第二份也要在** —— 原来这一份是静悄悄丢掉的',
+    );
+
+    const out = mkdtempSync(join(tmpdir(), 'doubak-out-'));
+    const res = exportImages({
+      index,
+      wanted: ['https://img1.doubanio.com/x/first.jpg', 'https://img1.doubanio.com/x/second.jpg'],
+      outDir: out,
+    });
+    assert.equal(res.written, 2);
+    assert.deepEqual(res.missing, []);
+    assert.equal(readFileSync(join(out, 'uploads/second.jpg'), 'utf-8'), 'second');
+  });
+});
+
+describe('档案里有、但取不出来的图', () => {
+  /**
+   * 把某一条捕获的 gzip member 弄坏。
+   *
+   * 翻的是 member 末尾的 CRC32/ISIZE 那几个字节——比翻中间可靠：deflate 流里
+   * 随便翻一位有可能仍然解得开（只是解出别的东西），而校验和一动必然报
+   * 「incorrect data check」。**要模拟的是位腐坏，就得让它稳定地表现成位腐坏。**
+   *
+   * @param {string} root makeBundle 的返回值
+   * @param {string} captureId 弄坏哪一条
+   */
+  function corrupt(root, captureId) {
+    const dir = join(root, 'bundle-a');
+    const rows = readFileSync(join(dir, 'index-0.ndjson'), 'utf-8')
+      .trimEnd().split('\n').map((l) => JSON.parse(l));
+    const row = rows.find((r) => r.capture_id === captureId);
+    assert.ok(row, `夹具里没有 ${captureId}——测试自己写错了`);
+    const seg = join(dir, 'seg-0.warc.gz');
+    const bytes = readFileSync(seg);
+    bytes[row.offset + row.length - 5] ^= 0xff;
+    writeFileSync(seg, bytes);
+    return row;
+  }
+
+  test('**一张图坏掉，其余的照样出得来**', () => {
+    // 原来这里是不设防的：`gunzipSync` 一抛，异常穿过 exportImages 与 generate()
+    // 一路冒到命令行，屏幕上只有 `Error: incorrect data check` 加一段 zlib 的
+    // 栈回溯——没有图片地址、没有 capture_id、没有档案名，而且**一页站点都没生成**。
+    const root = makeBundle([
+      {
+        capture_id: 'a-good', url: 'https://img1.doubanio.com/x/good.jpg',
+        surface: 'asset', route_key: 'asset.upload', body: 'x'.repeat(400),
+      },
+      {
+        capture_id: 'a-rot', url: 'https://img1.doubanio.com/x/rot.jpg',
+        surface: 'asset', route_key: 'asset.upload', body: 'y'.repeat(400),
+      },
+    ]);
+    corrupt(root, 'a-rot');
+
+    const out = mkdtempSync(join(tmpdir(), 'doubak-out-'));
+    const res = exportImages({
+      index: indexImages(root),
+      wanted: ['https://img1.doubanio.com/x/good.jpg', 'https://img1.doubanio.com/x/rot.jpg'],
+      outDir: out,
+    });
+
+    assert.equal(res.written, 1, '好的那张必须照常写出去');
+    assert.equal(res.paths['https://img1.doubanio.com/x/good.jpg'], '/uploads/good.jpg');
+    assert.equal(
+      res.paths['https://img1.doubanio.com/x/rot.jpg'], undefined,
+      '取不出来就不该留下路径——那会让页面上出现一张碎图',
+    );
+    assert.ok(
+      !existsSync(join(out, 'uploads/rot.jpg')),
+      '**盘上不许留 0 字节的 .jpg**：看起来有图、点开是坏的，比没有更糟',
+    );
+  });
+
+  test('报的是 capture_id 与档案位置，不是一句 zlib 的错', () => {
+    const root = makeBundle([{
+      capture_id: 'a-rot', url: 'https://img1.doubanio.com/x/rot.jpg',
+      surface: 'asset', route_key: 'asset.upload', body: 'y'.repeat(400),
+    }]);
+    corrupt(root, 'a-rot');
+
+    const out = mkdtempSync(join(tmpdir(), 'doubak-out-'));
+    const res = exportImages({
+      index: indexImages(root), wanted: ['https://img1.doubanio.com/x/rot.jpg'], outDir: out,
+    });
+
+    assert.equal(res.unreadable.length, 1);
+    const [u] = res.unreadable;
+    // 用户拿这条消息要做的事是**定位一份几百 MB 档案里的某一条捕获**，
+    // 所以这三样缺一不可。
+    assert.equal(u.captureId, 'a-rot');
+    assert.equal(u.url, 'https://img1.doubanio.com/x/rot.jpg');
+    assert.ok(u.dir.includes('bundle-a'), `要说清是哪份档案，实际是 ${u.dir}`);
+    assert.match(u.error, /a-rot @ seg-0\.warc\.gz\+\d+/, '错误消息本身也要带上位置');
+  });
+
+  test('**「缺」与「读不出来」必须分开**', () => {
+    // 下一步动作正好相反：缺的要重抓，读不出来的重抓没用。
+    // 混成一句「缺 N 张」，用户就会去做那个不管用的动作。
+    const root = makeBundle([{
+      capture_id: 'a-rot', url: 'https://img1.doubanio.com/x/rot.jpg',
+      surface: 'asset', route_key: 'asset.upload', body: 'y'.repeat(400),
+    }]);
+    corrupt(root, 'a-rot');
+
+    const out = mkdtempSync(join(tmpdir(), 'doubak-out-'));
+    const res = exportImages({
+      index: indexImages(root),
+      wanted: ['https://img1.doubanio.com/x/rot.jpg', 'https://img1.doubanio.com/x/never.jpg'],
+      outDir: out,
+    });
+
+    assert.deepEqual(
+      res.missing, ['https://img1.doubanio.com/x/never.jpg'],
+      '坏掉的那张不算「缺」——它就在档案里',
+    );
+    assert.equal(res.unreadable.length, 1);
+    assert.equal(res.unreadable[0].captureId, 'a-rot');
+  });
+
+  test('坏掉的封面不写进 bySubject —— 走「没有封面就只剩文字」那条路', () => {
+    const root = makeBundle(subjectWithCover(
+      '35507345',
+      'https://www.douban.com/location/drama/35507345/',
+      'https://img1.doubanio.com/pview/drama_subject_poster/m/public/561e90f2.jpg',
+    ).map((r) => (r.capture_id === 'a-35507345' ? { ...r, body: 'z'.repeat(400) } : r)));
+    corrupt(root, 'a-35507345');
+
+    const out = mkdtempSync(join(tmpdir(), 'doubak-out-'));
+    const res = exportImages({
+      index: indexImages(root), wanted: [], wantedBySubject: new Set(['35507345']), outDir: out,
+    });
+
+    assert.equal(
+      res.bySubject['35507345'], undefined,
+      '**不许留一个指向不存在文件的封面路径。** 页面上那是一张碎图，'
+      + '而既定行为是「没有封面就只剩文字，不放占位图」',
+    );
+    assert.equal(res.unreadable.length, 1);
+  });
+});
