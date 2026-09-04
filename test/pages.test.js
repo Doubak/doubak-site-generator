@@ -553,6 +553,161 @@ describe('按状态筛选', () => {
     // 出口要有文件可链——没有这个文件，Markdown 链到的是一个不存在的东西。
     assert.ok(existsSync(join(out, 'content/broadcast/_index.md')));
   });
+
+  test('**广播给五条预览，长文给两条** —— 两个数字是分开的', () => {
+    // 广播是首页上唯一能看见原话的地方（媒介小节是封面墙，长文是标题加摘要），
+    // 所以给得比长文多。共用一个常量的话，调其中一个必然连累另一个：长文一条就
+    // 占掉一屏，给五条等于把下面的小节全推下去。
+    const out = mkdtempSync(join(tmpdir(), 'doubak-preview-n-'));
+    const many = Array.from({ length: 8 }, (_, i) => bc(
+      {
+        text: `第${i}条`,
+        posted_at: { raw: `2021-11-0${i + 1} 10:00:00`, iso: `2021-11-0${i + 1}T10:00:00+08:00`, precision: 'second' },
+      },
+      { upstream_id: `b${i}`, url: `https://www.douban.com/people/x/status/b${i}/` },
+    ));
+    generate({
+      canonical: { marks: [mark()], subjects: [subject()], longform: [], broadcasts: many },
+      outDir: out,
+    });
+    const home = readFileSync(join(out, 'content/_index.md'), 'utf-8');
+    const shown = many.filter((_, i) => home.includes(`第${i}条`)).length;
+    assert.equal(shown, 5, `首页上出现了 ${shown} 条广播预览`);
+    // 而且是**最新的**五条：头插列表，旧的那三条不该占着位置。
+    for (const i of [0, 1, 2]) {
+      assert.ok(!home.includes(`第${i}条`), `第${i}条是较旧的一条，不该出现在预览里`);
+    }
+  });
+});
+
+describe('删掉再重标：一个作品仍然只有一页，而且旧的那次不许消失', () => {
+  /**
+   * ## 真实来源
+   *
+   * 《盗梦空间》2018-01-03 标过一次，2026-09-04 用户在豆瓣上删掉重标。豆瓣发了个新
+   * 的条目 id（1299196346 → 4937138397），解析器据此如实分成两条记录——那是对的，
+   * canonical 是事件日志。
+   *
+   * 而投影这一层原来一处判据都没有，于是踩到两个各自静默的毛病：
+   *
+   * 1. 两条标记生成**同一个文件名**，后写的整个盖掉先写的。git 上看不出来（页数
+   *    没变、没有新增没有删除），只在那一页的 diff 里——2018 年的短评与标签就这么
+   *    没了。
+   * 2. `targetIndex` 只看 subjectId，两条就判「撞车」，于是**两条广播的链接与封面
+   *    一起消失**，作品页上整个「说过什么」栏目也没了。而那正是这份档案最不可替代
+   *    的部分：豆瓣自己已经不显示 2018 年那条了。
+   */
+  const reMarked = () => ({
+    marks: [
+      // 旧的那条：2018 标的，最后一次看到是上一次抓取。
+      mark({
+        upstream_id: '1299196346',
+        subject: { id: '3541415', url: 'https://movie.douban.com/subject/3541415/', upstream_deleted: false },
+        revisions: [{
+          ...rev({
+            status: 'done', rating: 5, comment: '2018 年写的那句',
+            tags: ['心理'], marked_at: { raw: '2018-01-03', iso: '2018-01-03T00:00:00+08:00', precision: 'day' },
+          }, '2018-01-03T00:00:00+08:00'),
+          last_observed_at: '2026-09-04T09:53:12+10:00',
+        }],
+      }),
+      // 新的那条：今天重标的，最后一次看到是这次抓取。
+      mark({
+        upstream_id: '4937138397',
+        subject: { id: '3541415', url: 'https://movie.douban.com/subject/3541415/', upstream_deleted: false },
+        revisions: [{
+          ...rev({
+            status: 'done', rating: 5, comment: '2026 年重标时写的',
+            tags: ['2010'], marked_at: { raw: '2026-09-04', iso: '2026-09-04T00:00:00+08:00', precision: 'day' },
+          }, '2026-09-04T19:42:51+10:00'),
+          last_observed_at: '2026-09-04T19:42:51+10:00',
+        }],
+      }),
+    ],
+    subjects: [subject({ id: '3541415' })],
+    longform: [],
+    broadcasts: [bc({
+      posted_at: { raw: '2018-01-03 21:15:28', iso: '2018-01-03T21:15:28+08:00', precision: 'second' },
+      text: '2018 年那条广播', action: '看过', status: 'done', rating: 5,
+      target_type: 'movie', target_id: '3541415',
+    })],
+  });
+
+  test('只生成一个作品页，页头是**豆瓣现在还留着的**那一条', () => {
+    const p = project(reMarked());
+    const forSubject = p.marks.filter((m) => m.subjectId === '3541415');
+    assert.equal(forSubject.length, 1, `一个作品出了 ${forSubject.length} 页`);
+    // 判据是「最后一次看到」，不是 marked_at：补标一部老片时后者可以更早，
+    // 而那条在豆瓣上仍然是现存的那一条。
+    assert.equal(forSubject[0].comment, '2026 年重标时写的');
+    assert.deepEqual(forSubject[0].tags, ['2010']);
+  });
+
+  test('**旧那次不许消失**，它并进时间线', () => {
+    const p = project(reMarked());
+    const m = p.marks.find((x) => x.subjectId === '3541415');
+    const days = m.timeline.map((r) => (r.at ?? '').slice(0, 10));
+    assert.ok(days.includes('2018-01-03'), `2018 年那次标记从时间线上没了：${JSON.stringify(days)}`);
+    assert.ok(days.includes('2026-09-04'), '重标那次不在时间线上');
+    // 那一行必须带着当时的分——「那一天给了几颗星」正是这条时间线存在的理由。
+    const old = m.timeline.find((r) => (r.at ?? '').startsWith('2018-01-03'));
+    assert.equal(old.rating, 5);
+    assert.equal(old.status, 'done');
+    // 版本数要把被顶掉的那条也算上，否则页面会说「只有 1 个版本」，
+    // 而它下面的时间线明明列着两次标记。
+    assert.equal(m.revisionCount, 2);
+  });
+
+  test('**没有广播兜底时，旧标记自己的短评也要留下**', () => {
+    // 上一条里 2018 年那次同时存在于广播里，而广播精度到秒、会在归并时胜出
+    // ——也就是说那条断言其实是被广播救活的，换个作品就未必。真正的判据是：
+    // **被顶掉的那条标记本身**要进时间线。删掉重标发生在 2015 年标过、
+    // 而广播早被删掉的作品上时，它是唯一的证据。
+    const data = reMarked();
+    data.broadcasts = [];
+    const m = project(data).marks.find((x) => x.subjectId === '3541415');
+    const texts = m.timeline.map((r) => r.text);
+    assert.ok(texts.includes('2018 年写的那句'), `旧标记的短评没了：${JSON.stringify(texts)}`);
+    assert.ok(texts.includes('2026 年重标时写的'), '新标记的短评没了');
+  });
+
+  test('**同一媒介的两条标记不是撞车**：广播照样接得回作品页', () => {
+    const p = project(reMarked());
+    const b = p.broadcasts[0];
+    assert.ok(b.target, '广播的链接被判成撞车丢掉了 —— 页面上会退化成一行纯文字');
+    assert.equal(b.target.subjectId, '3541415');
+    assert.equal(b.target.medium, 'movie');
+  });
+
+  test('**反过来也要接**：那条广播要进作品页的时间线，而且带着秒', () => {
+    // 上一条查的是「广播卡片 → 作品页」，这一条查的是「作品页 ← 广播」。两条
+    // 判据分别在 `targetIndex` 与 `broadcastsBySubject` 里，各写一份——一边接得回
+    // 而另一边接不回的话，广播卡片上有链接、作品页上却没有那段历史，两边都看不
+    // 出是谁错了。
+    //
+    // 判据是**秒**：标记只到天（canonical 补成 T00:00:00），只有广播带秒。
+    // 那一行退化成 'day' 就说明它是标记那一侧来的，广播根本没接进来。
+    const m = project(reMarked()).marks.find((x) => x.subjectId === '3541415');
+    const old = m.timeline.find((r) => (r.at ?? '').startsWith('2018-01-03'));
+    assert.equal(old.precision, 'second', '2018 那一行不是广播来的 —— 广播没接进时间线');
+    assert.equal(old.source, 'broadcast');
+    assert.equal(old.text, '2018 年那条广播');
+  });
+
+  test('**跨媒介撞车照旧不接** —— 这条规则本来要防的就是它', () => {
+    // 不同媒介的 id 各自编号，理论上会撞。接错了是档案在说假话，而且看不出来。
+    const p = project({
+      marks: [
+        mark({ medium: 'movie', upstream_id: 'a', subject: { id: '999', url: 'https://movie.douban.com/subject/999/', upstream_deleted: false } }),
+        mark({ medium: 'book', upstream_id: 'b', subject: { id: '999', url: 'https://book.douban.com/subject/999/', upstream_deleted: false } }),
+      ],
+      subjects: [], longform: [],
+      broadcasts: [bc({ text: '说了点什么', target_type: 'movie', target_id: '999' })],
+    });
+    assert.equal(p.broadcasts[0].target, null, '撞车了还硬接 —— 页面会指向另一部作品');
+    // 而两个作品页都还在：撞车影响的是「广播接不接得回去」，不是「作品有没有页」。
+    assert.equal(p.marks.filter((m) => m.subjectId === '999').length, 2);
+  });
 });
 
 /** 造一条 canonical 广播。 */
