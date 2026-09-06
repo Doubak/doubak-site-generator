@@ -730,6 +730,29 @@ const bc = (fields, over = {}) => ({
   ...over,
 });
 
+/**
+ * 去掉每条广播的时间戳标题之后的正文。
+ *
+ * ## 为什么要有这个
+ *
+ * 原来三条测试写的是 `assert.ok(!/douban\.com/.test(块))` —— 而它们要守的性质是
+ * **「接不回本地的内容不许变成站外链接」**：接不回作品页的作品名、接不回本地长文
+ * 的全文。整块禁止 `douban.com` 是那个性质的**代理**，两者在「站点上一个站外链接
+ * 都没有」的年代恰好等价。
+ *
+ * 加上时间戳那个豆瓣永久链接（出处，与作品页的「豆瓣原页」同一件事）之后，
+ * 代理与本体就分了家 —— 那三条测试会把一个正确的改动指控成它本来要抓的那个 bug。
+ * 这是这个项目记过三次的形状（「修订数恒等于记录数」「每次修订都必须推进状态」
+ * 「省下的时间是数量级的」），而记下的结论是：**宁可用三行断言真正的性质，
+ * 也不要用一行断言它的代理。**
+ *
+ * 所以判据收窄成「**除了时间戳那一行，正文里不许有 douban.com**」。
+ * 出处仍然只有一处，且是带标签的出口；内容仍然一个站外链接都没有。
+ */
+const bodyAfterHeading = (text) => text.split('\n')
+  .filter((ln) => !/^### /.test(ln))
+  .join('\n');
+
 describe('广播', () => {
   test('按月归档，月内倒序', () => {
     // 头插列表，新的在上。这与抓取方向、与「上面的都抓到了」那个不变量一致。
@@ -807,7 +830,11 @@ describe('广播', () => {
       url: 'https://www.douban.com/people/82160871/status/3669403283/',
     }]);
     assert.match(bare, /^想看$/m);
-    assert.ok(!/douban\.com/.test(bare));
+    // 正文里一个站外链接都没有；时间戳那一行的永久链接是**出处**，另说。
+    assert.ok(!/douban\.com/.test(bodyAfterHeading(bare)),
+      '接不回本地作品页时，作品名不许变成豆瓣链接');
+    assert.match(bare, /^### \[2021-11-02 10:00:00\]\(https:\/\/www\.douban\.com\/people\//m,
+      '时间戳要链回豆瓣那条广播 —— 那是出处，与作品页的「豆瓣原页」同一件事');
   });
 
   test('**没有动作词的广播也要接回作品页**', () => {
@@ -847,7 +874,8 @@ describe('广播', () => {
     assert.match(text, /豆瓣在这里截断了/);
     // 全文接回**本地**那一页，不是豆瓣。
     assert.match(text, /\.\.\/note\/872015292\.md/);
-    assert.ok(!/douban\.com/.test(text), '不该回退到豆瓣的 URL');
+    assert.ok(!/douban\.com/.test(bodyAfterHeading(text)),
+      '全文接回本地那一页，不许回退到豆瓣的 URL');
   });
 
   test('接不回本地长文时只说被截断，仍然不给豆瓣链接', () => {
@@ -857,7 +885,8 @@ describe('广播', () => {
     assert.equal(p.broadcasts[0].fullText, null);
     const text = broadcastMonthPage('2021-11', p.broadcasts);
     assert.match(text, /全文不在档案里/);
-    assert.ok(!/douban\.com/.test(text));
+    assert.ok(!/douban\.com/.test(bodyAfterHeading(text)),
+      '接不回本地长文时只说被截断，仍然不给豆瓣链接');
   });
 
   test('没被截断的广播不该冒出这句话', () => {
@@ -1017,9 +1046,10 @@ describe('广播', () => {
     });
     const text = broadcastMonthPage('2026-01', p.broadcasts, {});
     assert.match(text, /想看 莫阿娜 Moana \(2026\)/);
-    // **不给链接**：本地没有那一页。也绝不回退到豆瓣 URL——那会让一份号称离线可看
-    // 的档案为了一个链接去联网。
-    assert.ok(!/douban\.com/.test(text), '不许回退到豆瓣的地址');
+    // **作品名不给链接**：本地没有那一页，也不回退到豆瓣——把内容变成站外链接，
+    // 这份存档就从「豆瓣的替代品」退回成「豆瓣的指路牌」。
+    // （时间戳那一行的永久链接是**出处**，不在这条管辖范围内，见 bodyAfterHeading。）
+    assert.ok(!/douban\.com/.test(bodyAfterHeading(text)), '作品名不许回退到豆瓣的地址');
   });
 
   test('**接不回作品也要显示星数** —— 星与接不接得回来没有关系', () => {
