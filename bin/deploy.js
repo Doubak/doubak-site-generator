@@ -39,10 +39,12 @@ import { readCanonical } from '../src/canonical.js';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
+const sourceRepo = args.find((a) => a.startsWith('--source-repo='))?.slice('--source-repo='.length) || null;
 const [canonDir, bundlesDir, repoDir] = args.filter((a) => !a.startsWith('--'));
 
 if (!canonDir || !bundlesDir || !repoDir) {
-  console.error('用法: node bin/deploy.js <canonical 目录> <bundle 目录> <仓库目录> [--dry-run]');
+  console.error('用法: node bin/deploy.js <canonical 目录> <bundle 目录> <仓库目录> [--dry-run] [--source-repo=<url>]');
+  console.error('  --source-repo=<url>  页脚加一行「这个站点的源码」，指这一份站点自己的仓库；默认没有。');
   process.exit(2);
 }
 if (!existsSync(repoDir)) {
@@ -78,6 +80,7 @@ const r = generate({
   bundlesDir,
   outDir: stage,
   themeDir: join(HERE, '..', 'theme', 'hugo'),
+  sourceRepo,
 });
 console.log(`① 生成 ${r.pages} 页 · 图片 ${r.images.written} 张 · ${Date.now() - t0} ms`);
 

@@ -1657,3 +1657,70 @@ describe('用户写的字必须原样呈现', () => {
     assert.match(text, /&lt;tag&gt;/);
   });
 });
+
+/**
+ * 页脚那行「这个站点的源码」。
+ *
+ * 页脚本来就有一个「源码」，指的是**生成器**——那对谁都成立。这一行说的是
+ * **这一份站点自己**的仓库，每个人各不相同，所以它是个收 URL 的参数，
+ * 而不是一个 `--sample` 开关。
+ *
+ * **要守的方向是「不给就不出」。** 反过来（给了会出）出错时是显眼的：页脚少一行，
+ * 想加的人立刻发现。而默认写错是**静默**的：别人的站点页脚挂上一个不属于他的
+ * 仓库，链接看着挺正常，点进去才知道不是自己的——而他多半不会点。
+ */
+describe('页脚：这个站点自己的源码', () => {
+  const themeDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'theme', 'hugo');
+  /** 最小的 canonical —— 这几条测试看的是 hugo.toml，不是内容。 */
+  const empty = () => ({ marks: [], subjects: [], longform: [], broadcasts: [], doulists: [] });
+  const build = (opts) => {
+    const out = mkdtempSync(join(tmpdir(), 'doubak-srcrepo-'));
+    generate({ canonical: empty(), outDir: out, themeDir, ...opts });
+    return readFileSync(join(out, 'hugo.toml'), 'utf-8');
+  };
+
+  test('**不传就一个字都不出** —— 默认绝不能是我们那个样张仓库', () => {
+    const toml = build({});
+    assert.ok(!/sourceRepo/.test(toml), `默认不该写 sourceRepo：\n${toml}`);
+    assert.ok(!/doubak-site-generator-sample/.test(toml),
+      '默认把我们的仓库写进别人的站点，是这条功能唯一会静默出错的方向');
+  });
+
+  test('传了就写进 [params]，而且 TOML 还是合法的', () => {
+    const toml = build({ sourceRepo: 'https://github.com/someone/my-douban-archive' });
+    assert.match(toml, /sourceRepo = "https:\/\/github\.com\/someone\/my-douban-archive"/);
+    // **必须在 [params] 里面，不能在文件末尾另开一个表** —— TOML 不允许同一个表
+    // 出现两次，而「追加到末尾」会落进 [params.mediumNames] 里，静默变成另一个键。
+    // **判据是「在下一个子表之前」，不是「在 [params] 之后」。**
+    //
+    // 第一版找的是下一个顶格的表，而 `[params.mediumNames]` 是缩进的——于是
+    // 「段尾」永远是文件末尾，那条断言**不可能失败**。变异验过：把插入改成追加到
+    // 文件末尾，全绿。而追加的后果恰恰是最糟的那种：sourceRepo 落进
+    // [params.mediumNames]，静默变成 params.mediumNames.sourceRepo，
+    // TOML 合法、Hugo 不报错、页脚那一行不出现。
+    const params = toml.indexOf('\n[params]\n');
+    const sub = toml.indexOf('[params.', params + 2);
+    const end = sub < 0 ? toml.length : sub;
+    const at = toml.indexOf('sourceRepo');
+    assert.ok(params >= 0 && at > params && at < end,
+      `sourceRepo 必须在 [params] 之后、第一个 [params.*] 子表之前`
+      + `（params@${params} sourceRepo@${at} 子表@${sub}）`);
+  });
+
+  test('URL 是转义过的，不是拼进去的', () => {
+    // 仓库地址里出现引号的可能性很低，但「低」不是判据——拼字符串进配置文件
+    // 是注入，而这份配置随后会被 Hugo 执行。
+    const toml = build({ sourceRepo: 'https://example.com/a"b' });
+    assert.match(toml, /sourceRepo = "https:\/\/example\.com\/a\\"b"/);
+  });
+
+  test('模板里那一行是 `with`，不是无条件输出', () => {
+    // 没有这个的话，不传参数时页脚会出现一个 href 为空的链接——比多一行更糟，
+    // 因为它点得动而且什么都不做。
+    const tpl = readFileSync(join(themeDir, 'layouts', '_default', 'baseof.html'), 'utf-8');
+    // `{{- with` 也算（那个减号是收空白用的，收了页脚每页就只多一行而不是四行）。
+    assert.match(tpl, /\{\{-? with \.Site\.Params\.sourceRepo \}\}/);
+    assert.ok(!/doubak-site-generator-sample/.test(tpl),
+      '样张仓库的地址不许出现在模板里 —— 它是参数，不是默认值');
+  });
+});

@@ -14,7 +14,7 @@
  * 内容看着也正常，只是早就不在数据里了。
  */
 
-import { mkdirSync, writeFileSync, rmSync, cpSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, rmSync, cpSync, existsSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { join, dirname } from 'node:path';
 
@@ -36,8 +36,47 @@ import { frontMatter } from './yaml.js';import { buildPages } from './pages.js';
  * @param {string} opts.outDir
  * @param {boolean} [opts.clean] 先清空产出目录，默认 true
  * @param {string|null} [opts.themeDir] 一并拷进去的 Hugo 站点骨架；null = 只出 content/static
+ * @param {string|null} [opts.sourceRepo] 「这个站点的源码」链到哪；**默认没有**，见下
  */
-export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir = null }) {
+/**
+ * 把「这个站点的源码在哪」写进 `hugo.toml` 的 `[params]`。
+ *
+ * ## 为什么默认是**没有**，而且默认绝不能是我们那个仓库
+ *
+ * 页脚已经有一个「源码」，指的是**生成器**（doubak-site-generator）——那对谁都成立。
+ * 这里说的是另一件事：**这一份站点自己**的仓库。它是每个人各自的，样张站是
+ * `Doubak/doubak-site-generator-sample`，别人的站在别人自己的仓库里。
+ *
+ * 所以做成一个**收 URL 的参数**，不是一个 `--sample` 开关。开关会把我们的仓库
+ * 地址写死进生成器，那样任何人误开一次——或者哪天默认值写反了——他的站点页脚就
+ * 会挂上一个不属于他的仓库，而**他多半不会发现**：那条链接看着挺正常，点进去
+ * 才知道是别人的。收 URL 则顺带让这个功能对所有人成立：谁的站发在公开仓库里，
+ * 谁就可以写上自己的。
+ *
+ * 失败的方向也因此定了：**不给就什么都不出**。测试守的是这一条，不是「给了会出」。
+ *
+ * ## 为什么是插进 `[params]`，不是环境变量
+ *
+ * `npm run site` 产出的是一个**能自己跑的 Hugo 工程**——换个主题、自己再
+ * `hugo` 一遍，都该得到同样的页脚。写进环境变量的话，只有从我们的脚本走才有，
+ * 用户手动跑 `hugo` 就悄悄少一行，而少的那行不会报错。
+ *
+ * TOML 不允许同一个表出现两次，所以只能插在已有的 `[params]` 之后，不能在文件
+ * 末尾再开一个。
+ *
+ * @param {string} tomlPath @param {string} url
+ */
+function writeSourceRepo(tomlPath, url) {
+  const text = readFileSync(tomlPath, 'utf-8');
+  const at = text.indexOf('\n[params]\n');
+  if (at < 0) throw new Error(`${tomlPath} 里找不到 [params]，没法写入 sourceRepo`);
+  const line = `\n  # 这一份站点自己的仓库（bin/site.js --source-repo）。默认没有这一行。\n`
+    + `  sourceRepo = ${JSON.stringify(url)}\n`;
+  const cut = at + '\n[params]\n'.length;
+  writeFileSync(tomlPath, text.slice(0, cut) + line + text.slice(cut), 'utf-8');
+}
+
+export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir = null, sourceRepo = null }) {
   const p = project(canonical);
 
   if (clean) rmSync(outDir, { recursive: true, force: true });
@@ -108,6 +147,7 @@ export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir
   if (themeDir && existsSync(themeDir)) {
     cpSync(themeDir, outDir, { recursive: true });
     theme = themeDir;
+    if (sourceRepo) writeSourceRepo(join(outDir, 'hugo.toml'), sourceRepo);
   }
 
   for (const [rel, text] of files) {

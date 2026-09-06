@@ -71,6 +71,16 @@
   这是一份个人存档，与豆瓣网无关。<br>
   整个过程零网络请求，这个页面也不发一个外部请求。
   <a href="https://github.com/Doubak/doubak-site-generator" rel="noreferrer noopener">源码</a>
+  {{/*
+    上面那个「源码」是**生成器**的仓库，对谁都成立。这一个是**这一份站点自己**的
+    仓库，每个人各不相同，所以只有传了 `--source-repo` 才出现——默认一个字都不出。
+
+    默认绝不能是我们那个样张仓库：那样别人的站点页脚会挂上一个不属于他的仓库，
+    而那条链接看着挺正常，点进去才知道不是自己的。
+  */}}
+  {{- with .Site.Params.sourceRepo }} ·
+  <a href="{{ . }}" rel="noreferrer noopener">这个站点的源码</a>
+  {{- end }}
 </div></footer>
 
 </body>

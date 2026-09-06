@@ -22,10 +22,12 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const serve = args.includes('--serve');
 const noTheme = args.includes('--no-theme');
+const sourceRepo = args.find((a) => a.startsWith('--source-repo='))?.slice('--source-repo='.length) || null;
 const [canonDir, bundlesDir, outDir = 'site-out'] = args.filter((a) => !a.startsWith('--'));
 
 if (!canonDir) {
-  console.error('用法: node bin/site.js <canonical 目录> <bundle 目录> [产出目录] [--serve] [--no-theme]');
+  console.error('用法: node bin/site.js <canonical 目录> <bundle 目录> [产出目录] [--serve] [--no-theme] [--source-repo=<url>]');
+  console.error('  --source-repo=<url>  页脚加一行「这个站点的源码」。**这一份站点自己**的仓库，不是生成器的；默认没有。');
   process.exit(2);
 }
 if (noTheme) {
@@ -42,6 +44,7 @@ const r = generate({
   bundlesDir,
   outDir,
   themeDir: join(HERE, '..', 'theme', 'hugo'),
+  sourceRepo,
 });
 
 console.log(
