@@ -24,11 +24,11 @@ npm test                                                    # node --test，零�
 ```sh
 # 1. 抓取产出的一堆 bundle → canonical
 cd doubak-data-parser
-node bin/parse.js ~/downloads/20260806 ~/downloads/20260806-canonical
+node bin/parse.js ~/downloads/exports ~/downloads/canonical
 
 # 2. canonical + bundle → HTML
 cd ../doubak-site-generator
-npm run site -- ~/downloads/20260806-canonical ~/downloads/20260806 ~/downloads/20260806-site
+npm run site -- ~/downloads/canonical ~/downloads/exports ~/downloads/site
 ```
 
 跑完直接**双击 `public/index.html`** 就能看，不用起服务器（下面「不用服务器」一节说为什么）。

@@ -8,7 +8,24 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      # 两个仓库并排检出——这就是本地的默认开发布局，也是不需要 submodule
+      # 的原因。**扩展里有这个仓库那几个纯函数的逐字节拷贝**
+      # （`doubak-extension/src/vendor/`），而「是不是同一份」只有两边都在的
+      # 时候才验得了。`test/vendor-freshness.test.js` 缺了它会静默跳过，
+      # 跳过在 CI 里等于没测，所以那条测试在 CI 里把「缺仓库」直接判失败。
+      #
+      # 扩展按它的**默认分支**检出，所以一次跨仓库的改动会红一会儿：先推这边，
+      # 这里红（扩展还没同步）；再在扩展里跑一遍 sync-vendor 推上去，两边都绿。
+      # 那段红是对的——那段时间里两个宿主对同一份档案确实会给出不同结果，
+      # 而上一次同样的不一致是完全无声的，持续了两天。
       - uses: actions/checkout@v4
+        with:
+          path: doubak-site-generator
+
+      - uses: actions/checkout@v4
+        with:
+          repository: Doubak/doubak-extension
+          path: doubak-extension
 
       - uses: actions/setup-node@v4
         with:
@@ -17,6 +34,7 @@ jobs:
       # 依赖是空的，不需要 npm install。这不是省事，是这个项目的立身之本之一：
       # 一个要装几百个包才能重建的存档站是自相矛盾的（见 README）。
       - name: 跑测试
+        working-directory: doubak-site-generator
         run: npm test
 
       # **换一个时区再跑一遍。**
@@ -30,12 +48,14 @@ jobs:
       - name: 换个时区再跑一遍
         env:
           TZ: Pacific/Kiritimati
+        working-directory: doubak-site-generator
         run: npm test
 
       # 产出的每一份 front matter 都要能被读回来。这一条不需要 SSG，也不需要
       # 真实档案——**用合成数据跑一遍完整生成**，再把每个 .md 的 front matter
       # 用一个独立写的读取器解一遍。
       - name: 生成一遍并检查 front matter
+        working-directory: doubak-site-generator
         run: node tools/smoke.mjs
 
       # 覆盖率用 Node 自带的，不装任何东西；上传是 curl 打 Coveralls 的
@@ -55,6 +75,7 @@ jobs:
         if: github.event_name == 'push'
         env:
           COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+        working-directory: doubak-site-generator
         run: |
           node --test --experimental-test-coverage \
             --test-coverage-exclude='test/**' \
@@ -62,3 +83,11 @@ jobs:
             --test-reporter=dot --test-reporter-destination=stdout \
             "test/**/*.test.js"
           node tools/coveralls.mjs lcov.info
+
+      # 本地跑测试时扩展仓库可能不在场，那条新鲜度检查会「带原因跳过」。
+      # 跳过在本地合理，在 CI 里等于没测——所以显式再确认一遍它真的跑了。
+      - name: 确认 vendor 新鲜度检查确实跑了而不是跳过了
+        working-directory: doubak-site-generator
+        run: |
+          test -f ../doubak-extension/tools/sync-vendor.mjs || {
+            echo '::error::扩展仓库缺失，vendor 新鲜度检查会静默跳过'; exit 1; }
