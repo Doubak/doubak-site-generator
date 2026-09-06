@@ -750,7 +750,10 @@ const bc = (fields, over = {}) => ({
  * 出处仍然只有一处，且是带标签的出口；内容仍然一个站外链接都没有。
  */
 const bodyAfterHeading = (text) => text.split('\n')
-  .filter((ln) => !/^### /.test(ln))
+  // 时间戳标题，和紧跟它的那一行出处（`[豆瓣原页](…)`）。**只认整行完全等于
+  // 这个形状的**——写成「含有 豆瓣原页 就跳过」的话，正文里真出现一个回退链接、
+  // 而它恰好也带这四个字时，就被这条辅助函数悄悄放行了。
+  .filter((ln) => !/^### /.test(ln) && !/^\[豆瓣原页\]\(\S+\)$/.test(ln))
   .join('\n');
 
 describe('广播', () => {
@@ -833,8 +836,10 @@ describe('广播', () => {
     // 正文里一个站外链接都没有；时间戳那一行的永久链接是**出处**，另说。
     assert.ok(!/douban\.com/.test(bodyAfterHeading(bare)),
       '接不回本地作品页时，作品名不许变成豆瓣链接');
-    assert.match(bare, /^### \[2021-11-02 10:00:00\]\(https:\/\/www\.douban\.com\/people\//m,
-      '时间戳要链回豆瓣那条广播 —— 那是出处，与作品页的「豆瓣原页」同一件事');
+    // **标题本身不是链接**：锚点是 SSG 从标题文字生成的，站内固定链接靠它。
+    assert.match(bare, /^### 2021-11-02 10:00:00$/m, '时间戳是纯文字，不是链接');
+    assert.match(bare, /^\[豆瓣原页\]\(https:\/\/www\.douban\.com\/people\/\S+\)$/m,
+      '出处单独一行 —— 与作品页的「豆瓣原页」同一件事');
   });
 
   test('**没有动作词的广播也要接回作品页**', () => {
@@ -1699,6 +1704,129 @@ describe('用户写的字必须原样呈现', () => {
  * 想加的人立刻发现。而默认写错是**静默**的：别人的站点页脚挂上一个不属于他的
  * 仓库，链接看着挺正常，点进去才知道不是自己的——而他多半不会点。
  */
+/**
+ * 动作句里的链接：指本地，还是指豆瓣，还是不给链接。
+ *
+ * **判据不是「本地有没有」，是「这一类东西我们收不收」** —— 混起来就会违反那条
+ * 写了三遍的规矩（作品名接不回本地时绝不回退到豆瓣 URL）：
+ *
+ *   收的（作品 / 豆列 / 长文）    本地有 → 站内链接；本地没有 → **不给链接**
+ *   不收的（相册 / 小组 / 影人）  → 豆瓣链接（主题给 ↗ 角标）
+ *
+ * 第一行是内容：作品是这份存档要替代豆瓣的东西，接不回来说明档案缺了它，给个
+ * 站外链接等于把「缺了」粉饰成「在那边」。第二行不是内容：作品相册里的照片明确
+ * 不在范围内（routes.js 的 UNSUPPORTED_ROUTES），这份存档从没声称收过它们。
+ */
+describe('动作句里的链接指到哪儿', () => {
+  const withParts = (parts, canon = {}) => project({
+    marks: [], subjects: [], longform: [], doulists: [], broadcasts: [
+      bc({ action: parts.map((x) => x.text).join(''), action_parts: parts }),
+    ],
+    ...canon,
+  }).broadcasts[0];
+
+  const subj = (medium, id) => ({
+    canonical_version: 'c', medium, id, url: null, upstream_deleted: false, revisions: [rev({}, 'x')],
+  });
+
+
+  /**
+   * 那条豆瓣永久链接**跨抓取要稳定**。
+   *
+   * 实测 3440 条广播，`data-status-url` 有 2834 条跨捕获变过，两个轴都不是内容：
+   * 追踪参数 `?_spm_id=…`（base64 解开就是 uid），以及 `/people/mewcatcher/` 与
+   * `/people/82160871/` 两种写法。两个都归一化之后 0/3440 再变。
+   *
+   * 不处理的话每次重新生成都会无缘无故改写 2827 条链接 —— 而这个项目靠读 diff
+   * 确认「只改了该改的」，那种噪音会把真改动埋掉。
+   */
+  test('**出处链接跨抓取要稳定** —— 追踪参数与用户名两种写法都归一化', () => {
+    const one = (url, account) => project({
+      broadcasts: [{ ...bc({ action: '想看' }), url, account }],
+    }).broadcasts[0].url;
+
+    const want = 'https://www.douban.com/people/82160871/status/4088086916/';
+    assert.equal(one('https://www.douban.com/people/mewcatcher/status/4088086916/?_spm_id=ODIxNjA4NzE',
+      { user_id: '82160871' }), want, '追踪参数要去掉');
+    assert.equal(one('https://www.douban.com/people/mewcatcher/status/4088086916/',
+      { user_id: '82160871' }), want, '用户名要换成数字 uid —— 用户名会改');
+    assert.equal(one('https://www.douban.com/people/82160871/status/4088086916/',
+      { user_id: '82160871' }), want, '本来就是数字的不动');
+  });
+
+  test('拿不到 uid 时只去查询串，不瞎改路径', () => {
+    const u = project({ broadcasts: [{ ...bc({ action: '想看' }),
+      url: 'https://www.douban.com/people/mewcatcher/status/1/?_spm_id=x', account: null }] }).broadcasts[0].url;
+    assert.equal(u, 'https://www.douban.com/people/mewcatcher/status/1/');
+  });
+
+  test('**收的那一类，本地有 → 站内链接（写文件路径，不写 URL 方案）**', () => {
+    const b = withParts(
+      [{ text: '上传了1张照片到 ' }, { text: '寂静之人', url: 'https://www.douban.com/game/30246116/' }],
+      { subjects: [subj('game', '30246116')] },
+    );
+    assert.deepEqual(b.actionParts[1], { text: '寂静之人', href: 'game/30246116.md' });
+    assert.match(broadcastMonthPage('2021-11', [b]), /\[寂静之人\]\(\.\.\/game\/30246116\.md\)/);
+  });
+
+  test('**收的那一类，本地没有 → 不给链接，也不回退到豆瓣**', () => {
+    // 这是那条写了三遍的规矩。给个站外链接等于把「档案里缺了这个作品」
+    // 粉饰成「它在豆瓣那边」。
+    const b = withParts([
+      { text: '想看 ' }, { text: '某片', url: 'https://movie.douban.com/subject/999999/' },
+    ]);
+    assert.deepEqual(b.actionParts[1], { text: '某片' });
+    const page = broadcastMonthPage('2021-11', [b]);
+    assert.ok(!/douban\.com/.test(bodyAfterHeading(page)), '接不回本地的作品名不许链到豆瓣');
+    assert.match(page, /想看 某片/);
+  });
+
+  test('**不收的那一类 → 链到豆瓣**（相册、小组、影人、榜单、短链）', () => {
+    for (const url of [
+      // **作品的 URL 是这两个的前缀** —— 不钉结尾的话它们会被认成作品，
+      // 于是走「收的那一类」，本地没有就不给链接，链接静默消失。
+      'https://www.douban.com/game/30246116/photos/',
+      'https://movie.douban.com/subject/26805209/discussion/615303804/',
+      'https://www.douban.com/group/GirlGamers/',
+      'https://movie.douban.com/celebrity/1044707/',
+      'https://www.douban.com/board/1000407/?icn=status_board&cate=',
+      'https://douc.cc/16nLhb',
+    ]) {
+      const b = withParts([{ text: '看 ' }, { text: '那个', url }]);
+      assert.deepEqual(b.actionParts[1], { text: '那个', href: url, external: true },
+        `${url} 该指出去 —— 这一类我们本来就不收`);
+    }
+  });
+
+  test('豆列与长文：本地有就接回本地那一页', () => {
+    const dl = { canonical_version: 'c', identity_layer: 'upstream_id', upstream_id: '45473911',
+      account: {}, ownership: 'own', owner: {}, url: null, revisions: [rev({ title: '游戏购买小账本' }, 'x')] };
+    const b = withParts(
+      [{ text: '收藏游戏到豆列 ' }, { text: '游戏购买小账本', url: 'https://www.douban.com/doulist/45473911/' }],
+      { doulists: [dl] },
+    );
+    assert.deepEqual(b.actionParts[1], { text: '游戏购买小账本', href: 'doulist/45473911.md' });
+  });
+
+  test('**文字两边的空格不许进链接** —— 否则空格上会画下划线', () => {
+    const b = withParts([{ text: '收藏到 ' }, { text: ' 名字 ', url: 'https://douc.cc/x' }]);
+    const md = broadcastMonthPage('2021-11', [b]);
+    assert.match(md, / \[名字\]\(https:\/\/douc\.cc\/x\) /);
+  });
+
+  test('没有分段时照旧渲染整句', () => {
+    const b = project({ broadcasts: [bc({ action: '想看' })] }).broadcasts[0];
+    assert.equal(b.actionParts, null);
+    assert.match(broadcastMonthPage('2021-11', [b]), /^想看$/m);
+  });
+
+  test('**每一段的文字都要转义** —— 它是豆瓣给的字', () => {
+    // 实测有 6 个标题带方括号（Fate/stay night [Heaven\'s Feel]）、5 个带下划线。
+    const b = withParts([{ text: '想看 ' }, { text: 'SAC_2045', url: 'https://douc.cc/x' }]);
+    assert.match(broadcastMonthPage('2021-11', [b]), /\[SAC\\_2045\]/);
+  });
+});
+
 describe('页脚：这个站点自己的源码', () => {
   const themeDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'theme', 'hugo');
   /** 最小的 canonical —— 这几条测试看的是 hugo.toml，不是内容。 */
