@@ -21,7 +21,7 @@ import { project, groupMarks } from '../src/projection.js';
 import {
   markPage, longformPage, doulistPage, markPath, longformPath, verb,
   broadcastMonthPage, broadcastMonthPath, monthOf, plainText, UNDATED,
-  markFilterPath, markFilterPage, mdTitleAttr, coverStripItem,
+  markFilterPath, markFilterPage, mdTitleAttr, coverStripItem, SOURCE_LINK_TITLE,
 } from '../src/markdown.js';
 
 /** 造一条 canonical 标记。 */
@@ -750,10 +750,10 @@ const bc = (fields, over = {}) => ({
  * 出处仍然只有一处，且是带标签的出口；内容仍然一个站外链接都没有。
  */
 const bodyAfterHeading = (text) => text.split('\n')
-  // 时间戳标题，和紧跟它的那一行出处（`[豆瓣原页](…)`）。**只认整行完全等于
+  // 时间戳标题，和紧跟它的那一行出处（`[豆瓣原页](… "…")`）。**只认整行完全等于
   // 这个形状的**——写成「含有 豆瓣原页 就跳过」的话，正文里真出现一个回退链接、
   // 而它恰好也带这四个字时，就被这条辅助函数悄悄放行了。
-  .filter((ln) => !/^### /.test(ln) && !/^\[豆瓣原页\]\(\S+\)$/.test(ln))
+  .filter((ln) => !/^### /.test(ln) && !/^\[豆瓣原页\]\(\S+ "[^"]+"\)$/.test(ln))
   .join('\n');
 
 describe('广播', () => {
@@ -838,8 +838,42 @@ describe('广播', () => {
       '接不回本地作品页时，作品名不许变成豆瓣链接');
     // **标题本身不是链接**：锚点是 SSG 从标题文字生成的，站内固定链接靠它。
     assert.match(bare, /^### 2021-11-02 10:00:00$/m, '时间戳是纯文字，不是链接');
-    assert.match(bare, /^\[豆瓣原页\]\(https:\/\/www\.douban\.com\/people\/\S+\)$/m,
+    assert.match(bare, /^\[豆瓣原页\]\(https:\/\/www\.douban\.com\/people\/\S+ "[^"]+"\)$/m,
       '出处单独一行 —— 与作品页的「豆瓣原页」同一件事');
+  });
+
+  test('**出处那个链接必须带 title** —— 主题靠它认出这一段', () => {
+    // 主题要把这一段收成时间戳右端的角标，就得先认出「哪一段是出处」。
+    // 原来认的是「时间戳标题紧跟着的、整段只有一个站外链接的那一段」——那是个
+    // **代理**：它与「这一段是出处」只在「没有别的段落长这样」时等价。
+    //
+    // 实测这份档案 3503 条广播里 10 条没有出处，同时站点上有 3 段正文整段只是
+    // 一个裸链接（Goldmark 的 linkify 会自动把它变成 `<a>`）。今天这两组没撞上，
+    // 撞上的那天用户写的那句话会被当成出处**收成一枚图标**——正文静默消失。
+    //
+    // `title` 是 CommonMark 核心语法（换任何 SSG 都渲染成 `title=`），而 linkify
+    // 自动生成的链接永远没有 title，判据因此是精确的而不是巧合的。
+    const text = broadcastMonthPage('2021-11', [{
+      postedAtRaw: '2021-11-02 10:00:00', text: '随便说说', images: [], action: null, target: null,
+      url: 'https://www.douban.com/people/82160871/status/3669403283/',
+    }]);
+    assert.ok(text.includes(`"${SOURCE_LINK_TITLE}"`), '出处链接要带上 title');
+    // 正文里那些链接**一个都不许带 title**，否则主题会把它们也当成出处。
+    for (const m of text.matchAll(/\[[^\]]*\]\(([^)]*)\)/g)) {
+      if (m[0].includes(SOURCE_LINK_TITLE)) continue;
+      assert.ok(!/ "/.test(m[1]), `正文链接不该带 title：${m[0]}`);
+    }
+  });
+
+  test('没有出处时不留空段落', () => {
+    // 实测 3503 条里有 10 条抽不到 `data-status-url`。留个空段落的话，主题那条
+    // 「标题紧跟着的那一段」会落到正文头上。
+    const text = broadcastMonthPage('2021-11', [{
+      postedAtRaw: '2021-11-02 10:00:00', text: '随便说说', images: [],
+      action: null, target: null, url: null,
+    }]);
+    assert.match(text, /^### 2021-11-02 10:00:00\n\n随便说说$/m,
+      '没有出处时，标题下面紧跟着的就是正文');
   });
 
   test('**没有动作词的广播也要接回作品页**', () => {
@@ -1167,6 +1201,34 @@ describe('Hugo 骨架', () => {
       'layouts/partials/pager.html', 'layouts/partials/statuschips.html']) {
       assert.ok(existsSync(join(THEME, f)), `骨架缺 ${f}`);
     }
+  });
+
+  test('**广播出处的角标：生成器写 title，主题认 title**', () => {
+    // 两处约定，分在两个文件里，任何一边单独改都不会报错——只会让那一枚角标
+    // 悄悄退回成「独占一整行的一个箭头」，也就是这次要修掉的那个样子。
+    const css = readFileSync(join(THEME, 'static/site.css'), 'utf-8');
+    assert.match(css, /\.section-broadcast h3 \+ p > a\[href\^="http"\]\[title\]:only-child/,
+      '主题认出出处那一段靠的是 title，与 SOURCE_LINK_TITLE 是同一份约定');
+    assert.match(css, /--icon-douban/,
+      '角标上那枚豆瓣标');
+    // 浮到时间戳那一行。**删掉就会退回占掉一整行**，而没有任何东西会因此变红
+    // ——所以这一条盯的是这个属性还在。
+    const rule = css.slice(css.indexOf('.section-broadcast h3 + p > a[href^="http"][title]:only-child'));
+    assert.match(rule.slice(0, rule.indexOf('}')), /float:\s*right/,
+      '出处角标要浮到时间戳那一行的右端，不能自成一行');
+  });
+
+  test('**样式表里一个外部地址都不许有**', () => {
+    // 页脚那句「这个页面也不发一个外部请求」管的就是这个。图标全部内联成
+    // `data:` URI；哪天有人把它换成 doubanio 上的一张图，页面照样渲染、
+    // 照样好看，只是那句话变成了假话——与封面回退那次是同一个形状。
+    const css = readFileSync(join(THEME, 'static/site.css'), 'utf-8');
+    const bad = [...css.matchAll(/url\(\s*["']?(?!data:)([^"')]+)/g)]
+      .map((m) => m[1])
+      .filter((u) => /^(https?:)?\/\//.test(u));
+    assert.deepEqual(bad, [], '样式表里出现了会发外部请求的地址');
+    // 判据本身要能失败：确认真的扫到了 url(…)。
+    assert.ok(css.match(/url\(/g).length >= 2, '一个 url() 都没扫到，正则大概坏了');
   });
 
   test('**凡是数作品条数的地方都用 .RegularPages，不用 .Pages**', () => {
