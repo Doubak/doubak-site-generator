@@ -1207,15 +1207,69 @@ describe('Hugo 骨架', () => {
     // 两处约定，分在两个文件里，任何一边单独改都不会报错——只会让那一枚角标
     // 悄悄退回成「独占一整行的一个箭头」，也就是这次要修掉的那个样子。
     const css = readFileSync(join(THEME, 'static/site.css'), 'utf-8');
-    assert.match(css, /\.section-broadcast h3 \+ p > a\[href\^="http"\]\[title\]:only-child/,
-      '主题认出出处那一段靠的是 title，与 SOURCE_LINK_TITLE 是同一份约定');
-    assert.match(css, /--icon-douban/,
-      '角标上那枚豆瓣标');
+    assert.match(css, /--icon-douban/, '角标上那枚豆瓣标');
+    const sel = '.section-broadcast h3 + p > a[href^="http"][title]:only-child';
+    assert.ok(css.includes(sel), `CSS 里找不到 ${sel}`);
     // 浮到时间戳那一行。**删掉就会退回占掉一整行**，而没有任何东西会因此变红
     // ——所以这一条盯的是这个属性还在。
-    const rule = css.slice(css.indexOf('.section-broadcast h3 + p > a[href^="http"][title]:only-child'));
+    const rule = css.slice(css.indexOf(sel));
     assert.match(rule.slice(0, rule.indexOf('}')), /float:\s*right/,
       '出处角标要浮到时间戳那一行的右端，不能自成一行');
+  });
+
+  test('**每一种放了出处的页面，主题都得盖到** —— 首页那五条漏过一次', () => {
+    // 漏掉首页不是因为规则难写，是因为**验证的范围跟着预期走了**：量了
+    // `broadcast/*.html` 里 3493 枚角标，没量首页。而首页那五条的出处落进了
+    // 「首页每节末尾那个『看全部 →』胶囊」那条规则里，被画成了一个跟
+    // 「看全部 1344 →」一模一样的按钮——首页还是这个站点第一眼看到的地方。
+    //
+    // 所以判据从「广播页对不对」换成「**凡是出现出处的小节，样式表都要有一条**」，
+    // 由产出目录自己数出来，而不是照着记忆列一遍。
+    const out = mkdtempSync(join(tmpdir(), 'doubak-src-'));
+    generate({
+      canonical: {
+        marks: [], subjects: [], longform: [], doulists: [],
+        broadcasts: [bc({ text: '随便说说' })],
+      },
+      outDir: out,
+    });
+
+    // 主题里 `<main class="section-{{ .Section | default "home" }}">`，
+    // 而 Hugo 的 .Section 是 `content/` 下的第一段路径；顶层页面没有小节。
+    const sections = new Set();
+    const dir = join(out, 'content');
+    for (const rel of readdirSync(dir, { recursive: true }).map(String)) {
+      if (!rel.endsWith('.md')) continue;
+      if (!readFileSync(join(dir, rel), 'utf-8').includes(`"${SOURCE_LINK_TITLE}"`)) continue;
+      const parts = rel.split(/[\\/]/);
+      sections.add(parts.length > 1 ? parts[0] : 'home');
+    }
+    // 反面判据：真扫到了东西，否则这条测试永远绿。
+    assert.deepEqual([...sections].sort(), ['broadcast', 'home'],
+      '出处出现在哪些小节里，变了就要跟着改样式表');
+
+    const css = readFileSync(join(THEME, 'static/site.css'), 'utf-8');
+    for (const sec of sections) {
+      assert.ok(
+        css.includes(`.section-${sec} h3 + p > a[href^="http"][title]:only-child`),
+        `\`content/\` 里有小节 ${sec} 放了出处，样式表却没有对应的角标规则`,
+      );
+      assert.match(css, new RegExp(`\\.section-${sec} \\{[^}]*--stamp-line`),
+        `小节 ${sec} 没给 --stamp-line，角标提不回时间戳那一行`);
+    }
+  });
+
+  test('**首页的「看全部」胶囊不许把出处也画成按钮**', () => {
+    // 那条规则说的是「每节末尾那个看全部」，写的却是「整段只有一个链接的那一段」
+    // ——又一次代理。判据用 title，与广播页那边是同一把钥匙，只是从另一侧用。
+    const css = readFileSync(join(THEME, 'static/site.css'), 'utf-8');
+    for (const m of css.matchAll(/\.section-home p:not\(:has\(img\)\)[^{]*\{/g)) {
+      assert.match(m[0], /:not\(\[title\]\)/,
+        `这条规则会把出处也当成「看全部」按钮：${m[0].trim()}`);
+    }
+    // 反面判据：真的有这几条规则在。
+    assert.ok([...css.matchAll(/\.section-home p:not\(:has\(img\)\)[^{]*\{/g)].length >= 2,
+      '一条「看全部」规则都没扫到，正则大概坏了');
   });
 
   test('**样式表里一个外部地址都不许有**', () => {
@@ -1642,7 +1696,10 @@ describe('Hugo 骨架', () => {
     // 「药丸有了，clear 没了」这种看起来只是缩进不对、其实是选择器整条没生效的样子。
     const css = readFileSync(join(THEME_DIR, 'static/site.css'), 'utf-8');
     const SHARED = '.section-home p:not(:has(img))';
-    for (const sel of [`${SHARED}:has(> a:only-child)`, `${SHARED} > a:only-child`]) {
+    // 链接那一半也要共用：`:not([title])` 把广播的出处排除在外（见「首页的
+    // 「看全部」胶囊不许把出处也画成按钮」），漏在一条上就又是「只坏一半」。
+    const LINK = 'a:only-child:not([title])';
+    for (const sel of [`${SHARED}:has(> ${LINK})`, `${SHARED} > ${LINK}`]) {
       assert.ok(css.includes(sel), `CSS 里找不到 ${sel}`);
     }
 
@@ -1654,8 +1711,9 @@ describe('Hugo 骨架', () => {
       assert.ok(m, `CSS 里找不到 ${re}`);
       return m[1];
     };
+    const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const button = /margin-top:\s*var\((--s\d)\)/
-      .exec(decl(/\.section-home p:not\(:has\(img\)\):has\(> a:only-child\) \{([^}]*)\}/));
+      .exec(decl(new RegExp(`${esc(`${SHARED}:has(> ${LINK})`)} \\{([^}]*)\\}`)));
     const cover = /margin:[^;]*?var\((--s\d)\) 0;/
       .exec(decl(/\.section-home p > a\[href\$="\.html"\] > img \{([^}]*)\}/));
     assert.ok(button, '按钮没写死上边距，它会跟着上一个元素（ul / p / h3 各不相同）变');
