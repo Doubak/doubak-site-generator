@@ -2,7 +2,7 @@
 /**
  * 把构建好的站点铺进一个**已存在的仓库目录**，让 GitHub Pages 能直接发布。
  *
- *   node bin/deploy.js <canonical 目录> <bundle 目录> <仓库目录> [--dry-run]
+ *   node bin/deploy.js <canonical 目录> <bundle 目录> <仓库目录> [--dry-run] [--drop-notes=…]
  *
  * ## 为什么不能直接推产出目录
  *
@@ -35,6 +35,7 @@ import { fileURLToPath } from 'node:url';
 import { generate } from '../src/generate.js';
 import { ensureHugo } from '../src/hugo-bin.js';
 import { readCanonical } from '../src/canonical.js';
+import { restrictedNotes, DROPPABLE } from '../src/restricted.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -44,6 +45,7 @@ const [canonDir, bundlesDir, repoDir] = args.filter((a) => !a.startsWith('--'));
 
 if (!canonDir || !bundlesDir || !repoDir) {
   console.error('用法: node bin/deploy.js <canonical 目录> <bundle 目录> <仓库目录> [--dry-run] [--source-repo=<url>]');
+  console.error('  --drop-notes=author,platform,unsure  豆瓣上不公开的日记，哪几类不要发出去（或 all）；默认全发');
   console.error('  --source-repo=<url>  页脚加一行「这个站点的源码」，指这一份站点自己的仓库；默认没有。');
   process.exit(2);
 }
@@ -74,9 +76,27 @@ const KEEP = new Set([
 const stage = join(HERE, '..', '.deploy-stage');
 rmSync(stage, { recursive: true, force: true });
 
+const canonical = readCanonical(canonDir);
+
+const priv = restrictedNotes(canonical.longform ?? []);
+const drop = (args.find((a) => a.startsWith('--drop-notes='))?.slice('--drop-notes='.length) ?? '')
+  .split(',').map((x) => x.trim()).filter(Boolean);
+for (const d of drop) {
+  if (d !== 'all' && !DROPPABLE.includes(d)) {
+    console.error(`--drop-notes 只认 ${DROPPABLE.join(' / ')} / all，收到 ${d}`);
+    process.exit(2);
+  }
+}
+const dropping = new Set(
+  DROPPABLE.filter((k) => drop.includes('all') || drop.includes(k)).flatMap((k) => priv[k].map((x) => x.id)),
+);
+if (dropping.size) {
+  canonical.longform = canonical.longform.filter((rec) => !dropping.has(rec.upstream_id));
+}
+
 const t0 = Date.now();
 const r = generate({
-  canonical: readCanonical(canonDir),
+  canonical,
   bundlesDir,
   outDir: stage,
   themeDir: join(HERE, '..', 'theme', 'hugo'),
@@ -105,6 +125,26 @@ const bytes = files.reduce((n, f) => n + statSync(join(publicDir, f)).size, 0);
 console.log('\n③ 这次会公开：');
 for (const [k, n] of Object.entries(byKind)) console.log(`   ${k} ${n}`);
 console.log(`   合计 ${(bytes / 1024 / 1024).toFixed(1)} MB → ${resolve(repoDir)}`);
+
+const total = priv.author.length + priv.platform.length + priv.unsure.length;
+if (total) {
+  console.log(`\n④ 有 ${total} 篇日记在豆瓣上不是公开的。**这里没有默认动作**，因为两个方向相反：`);
+  const say = (key, head, tail) => {
+    if (!priv[key].length) return;
+    const gone = dropping.size && priv[key].every((x) => dropping.has(x.id));
+    console.log(`\n   ${head}（${priv[key].length} 篇）${gone ? ' —— 已按 --drop-notes 拿掉' : ''}`);
+    console.log(`   ${tail}`);
+    for (const x of priv[key]) {
+      console.log(`     · ${x.title}   note/${x.id}.html`);
+      if (x.notice) console.log(`       豆瓣的说法：${x.notice}`);
+    }
+  };
+  say('author', '作者自己设成「仅自己可见」', '发出去 = 把他藏起来的东西公开了，而且撤不回来。');
+  say('platform', '豆瓣锁掉的', '发出去 = 这份存档在做它该做的事；不发 = 替豆瓣把它二次消音。');
+  say('unsure', '说不准', '页面上认不出来（多半是豆瓣改版），或者这份 canonical 早于这个字段。按不公开处理。');
+  console.log(`\n   要拿掉其中某一类：--drop-notes=${DROPPABLE.join(',')} 里挑（可多选，或 all）。`);
+  console.log('   什么都不加就是全部照发——这是明确的选择，不是疏忽。');
+}
 
 const stale = readdirSync(repoDir).filter((n) => !KEEP.has(n));
 if (stale.length) {

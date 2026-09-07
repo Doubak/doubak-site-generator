@@ -2002,3 +2002,76 @@ describe('页脚：这个站点自己的源码', () => {
       '样张仓库的地址不许出现在模板里 —— 它是参数，不是默认值');
   });
 });
+
+/**
+ * 豆瓣上不公开的日记，页面上要说出来。
+ *
+ * 起因是一篇真实的日记：《想看的被河蟹的电影》在豆瓣上被锁成「仅自己可见」，
+ * 页面上豆瓣自己写着「含有违规或引发不良讨论的内容……请勿发布同类信息」，而
+ * 生成出来的页面**一个字都没提**——正文照登，看着像什么都没发生过。一份为
+ * 「留住豆瓣拿掉的东西」而存在的存档，把「豆瓣把它拿下了」这件事漏掉了。
+ */
+describe('日记的可见性写进页面', () => {
+  const note = (over) => ({
+    kind: 'note', id: '1', url: 'https://www.douban.com/note/1/', title: '标题',
+    body: '正文', publishedAt: null, publishedAtRaw: null, location: null,
+    rating: null, subjectUrl: null, revisionCount: 1, lastSeenAt: null, ...over,
+  });
+
+  test('**豆瓣锁的：说出来，而且逐字引用豆瓣那句判词**', () => {
+    const t = longformPage(note({
+      visibility: 'private', restrictedBy: 'platform',
+      restrictionNotice: '含有违规或引发不良讨论的内容，内容仅自己可见，请勿发布同类信息',
+    }));
+    assert.match(t, /被豆瓣锁成了「仅自己可见」/);
+    assert.match(t, /含有违规或引发不良讨论的内容，内容仅自己可见，请勿发布同类信息/);
+    // 正文照旧在，两件事不互相顶替。
+    assert.match(t, /正文/);
+  });
+
+  test('**写进正文，不是只写进 front matter**', () => {
+    // 「Markdown 是产品，HTML 只是它的一个消费者」——只写 front matter 的话，
+    // 这件事在纯 Markdown 那棵树里根本不存在，换个主题就没了。而这不是版式，是内容。
+    const t = longformPage(note({ visibility: 'private', restrictedBy: 'platform', restrictionNotice: '某某理由' }));
+    const body = t.slice(t.indexOf('---', 3) + 3);
+    assert.match(body, /某某理由/, 'front matter 之外一个字都没有');
+  });
+
+  test('作者自己设的：说一句，不评论，也不编理由', () => {
+    const t = longformPage(note({ visibility: 'private', restrictedBy: 'author' }));
+    assert.match(t, /设成了「仅自己可见」/);
+    assert.doesNotMatch(t, /被豆瓣锁/);
+  });
+
+  test('**公开的什么都不写**', () => {
+    const t = longformPage(note({ visibility: 'public' }));
+    assert.doesNotMatch(t, /仅自己可见/);
+  });
+
+  test('**说不准的也什么都不写** —— 在页面上写一句猜的比不写更糟', () => {
+    // 它照样会出现在部署预演里（那一步的判据是「不是 public 就点名」），
+    // 但页面上不能替豆瓣或替用户说一句我们并不知道的话。
+    for (const v of ['unknown', null, undefined]) {
+      assert.doesNotMatch(longformPage(note({ visibility: v })), /仅自己可见/);
+    }
+  });
+
+  test('**豆瓣那句判词要转义** —— 它来自页面，和用户正文一样', () => {
+    const t = longformPage(note({
+      visibility: 'private', restrictedBy: 'platform', restrictionNotice: '含有*违规*内容_见_下',
+    }));
+    assert.match(t, /\\\*违规\\\*/, '星号没转义，会变成斜体');
+    assert.match(t, /\\_见\\_/, '下划线没转义');
+  });
+
+  test('豆瓣锁了却没给理由，也不留白句', () => {
+    const t = longformPage(note({ visibility: 'private', restrictedBy: 'platform', restrictionNotice: null }));
+    assert.match(t, /豆瓣没有给出理由/);
+  });
+
+  test('front matter 里两个字段都在 —— 主题排版与部署预演都要读它', () => {
+    const t = longformPage(note({ visibility: 'private', restrictedBy: 'author' }));
+    assert.match(t, /^douban_visibility: private$/m);
+    assert.match(t, /^douban_restricted_by: author$/m);
+  });
+});
