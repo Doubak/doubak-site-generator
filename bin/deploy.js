@@ -128,7 +128,7 @@ console.log(`   合计 ${(bytes / 1024 / 1024).toFixed(1)} MB → ${resolve(repo
 
 const total = priv.author.length + priv.platform.length + priv.unsure.length;
 if (total) {
-  console.log(`\n④ 有 ${total} 篇日记在豆瓣上不是公开的。**这里没有默认动作**，因为两个方向相反：`);
+  console.log(`\n④ 有 ${total} 篇日记在豆瓣上不是公开的。**默认全部照发**，但两种的道理不一样：`);
   const say = (key, head, tail) => {
     if (!priv[key].length) return;
     const gone = dropping.size && priv[key].every((x) => dropping.has(x.id));
@@ -140,10 +140,12 @@ if (total) {
     }
   };
   say('author', '作者自己设成「仅自己可见」', '发出去 = 把他藏起来的东西公开了，而且撤不回来。');
-  say('platform', '豆瓣锁掉的', '发出去 = 这份存档在做它该做的事；不发 = 替豆瓣把它二次消音。');
+  say('platform', '豆瓣锁掉的',
+    '**它本来就是公开的**，是豆瓣把它关掉的——发出去正是这份存档要做的事；不发 = 替豆瓣二次消音。');
   say('unsure', '说不准', '页面上认不出来（多半是豆瓣改版），或者这份 canonical 早于这个字段。按不公开处理。');
   console.log(`\n   要拿掉其中某一类：--drop-notes=${DROPPABLE.join(',')} 里挑（可多选，或 all）。`);
   console.log('   什么都不加就是全部照发——这是明确的选择，不是疏忽。');
+  console.log('   （NeoDB 导出那边同一件事的处置：豆瓣锁的照常公开，作者自己藏的收成仅提及者可见。）');
 }
 
 const stale = readdirSync(repoDir).filter((n) => !KEEP.has(n));
