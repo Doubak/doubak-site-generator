@@ -708,6 +708,38 @@ describe('删掉再重标：一个作品仍然只有一页，而且旧的那次�
     // 而两个作品页都还在：撞车影响的是「广播接不接得回去」，不是「作品有没有页」。
     assert.equal(p.marks.filter((m) => m.subjectId === '999').length, 2);
   });
+
+  test('**挑哪一条是全序判据** —— 否则同一份 canonical 生成两次可能不一样', () => {
+    // 与 bundle 去重那次同一条教训：V8 的 sort 是稳定的，缺一层判据时结果由输入
+    // 次序决定，而那看起来还很稳。所以要拿**打乱过的输入**喂它，不能只跑一遍。
+    const at = '2026-09-04T12:00:00+10:00';
+    const one = (upstreamId) => ({
+      medium: 'movie',
+      upstream_id: upstreamId,
+      subject: { id: '3541415', title: '盗梦空间' },
+      revisions: [{
+        last_observed_at: at,
+        fields: { marked_at: { iso: '2018-01-03T00:00:00+08:00' }, status: 'done' },
+      }],
+    });
+    const a = one('1299196346');
+    const b = one('4937138397');
+    const pick = (marks) => project({ marks, subjects: [], longform: [], broadcasts: [], doulists: [] })
+      .marks[0].upstreamId ?? null;
+    // 两个时间戳都一样时，第三层（上游 id）说了算，而且与次序无关。
+    assert.equal(pick([a, b]), pick([b, a]), '换个次序就挑出了另一条');
+  });
+
+  test('**判据要与导出适配器逐条一致** —— 不然站点与 NeoDB 会各留一条', () => {
+    // 那边决定 NeoDB 上留哪一条，这边决定站点上哪一条当页头。挑得不一样的话，
+    // 同一个作品在两处是两条不同的记录，而两边都不报错。
+    const src = readFileSync(new URL('../src/projection.js', import.meta.url), 'utf-8');
+    const block = /const sorted = \[\.\.\.g\]\.sort\(\(a, b\) => \{([\s\S]*?)\}\);/.exec(src);
+    assert.ok(block, '找不到那段排序 —— 是不是改写法了？');
+    assert.match(block[1], /seenAt\(a\) !== seenAt\(b\)/, '第一层该是「最后一次看到」');
+    assert.match(block[1], /markedAt\(a\) !== markedAt\(b\)/, '第二层该是标记日期');
+    assert.match(block[1], /upstream_id/, '缺第三层 —— 那就不是全序');
+  });
 });
 
 /** 造一条 canonical 广播。 */
