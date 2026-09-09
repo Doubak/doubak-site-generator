@@ -67,14 +67,38 @@ import { withoutPrivate } from './private.js';
  *
  * @param {string} tomlPath @param {string} url
  */
-function writeSourceRepo(tomlPath, url) {
+function writeParams(tomlPath, lines) {
   const text = readFileSync(tomlPath, 'utf-8');
   const at = text.indexOf('\n[params]\n');
-  if (at < 0) throw new Error(`${tomlPath} 里找不到 [params]，没法写入 sourceRepo`);
-  const line = `\n  # 这一份站点自己的仓库（bin/site.js --source-repo）。默认没有这一行。\n`
-    + `  sourceRepo = ${JSON.stringify(url)}\n`;
+  if (at < 0) throw new Error(`${tomlPath} 里找不到 [params]，没法写入站点参数`);
   const cut = at + '\n[params]\n'.length;
-  writeFileSync(tomlPath, text.slice(0, cut) + line + text.slice(cut), 'utf-8');
+  writeFileSync(tomlPath, text.slice(0, cut) + lines.join('') + text.slice(cut), 'utf-8');
+}
+
+/** @param {string} tomlPath @param {string} url */
+function writeSourceRepo(tomlPath, url) {
+  writeParams(tomlPath, [
+    `\n  # 这一份站点自己的仓库（bin/site.js --source-repo）。默认没有这一行。\n`
+    + `  sourceRepo = ${JSON.stringify(url)}\n`,
+  ]);
+}
+
+/**
+ * 「这一份是带 --include-private 生成的」。
+ *
+ * **必须写在页面上，不能只写在命令行里。** 生成时那句提示只有跑命令的人看得见一次，
+ * 而这个站点会被别人打开、会被搜索引擎收录、几个月后连作者自己都不记得是怎么生成的。
+ * 一份掺了私密内容的站点，看起来和一份没掺的一模一样——**分辨不出来，正是它危险的
+ * 地方**。所以它跟着页面走。
+ *
+ * @param {string} tomlPath
+ */
+function writeIncludePrivate(tomlPath) {
+  writeParams(tomlPath, [
+    '\n  # 这一份站点是带 --include-private 生成的：豆瓣上不公开的日记、豆列、广播\n'
+    + '  # 也在里面（页面上带 🔒）。默认没有这一行。\n'
+    + '  includePrivate = true\n',
+  ]);
 }
 
 export function generate({
@@ -156,6 +180,7 @@ export function generate({
     cpSync(themeDir, outDir, { recursive: true });
     theme = themeDir;
     if (sourceRepo) writeSourceRepo(join(outDir, 'hugo.toml'), sourceRepo);
+    if (includePrivate) writeIncludePrivate(join(outDir, 'hugo.toml'));
   }
 
   for (const [rel, text] of files) {
