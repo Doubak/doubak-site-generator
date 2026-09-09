@@ -35,7 +35,7 @@ import { fileURLToPath } from 'node:url';
 import { generate } from '../src/generate.js';
 import { ensureHugo } from '../src/hugo-bin.js';
 import { readCanonical } from '../src/canonical.js';
-import { restrictedNotes, DROPPABLE } from '../src/restricted.js';
+import { privateContent, withoutPrivate, DROPPABLE, PRIVATE_BY_DEFAULT } from '../src/private.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -45,7 +45,10 @@ const [canonDir, bundlesDir, repoDir] = args.filter((a) => !a.startsWith('--'));
 
 if (!canonDir || !bundlesDir || !repoDir) {
   console.error('用法: node bin/deploy.js <canonical 目录> <bundle 目录> <仓库目录> [--dry-run] [--source-repo=<url>]');
-  console.error('  --drop-notes=author,platform,unsure  豆瓣上不公开的日记，哪几类不要发出去（或 all）；默认全发');
+  console.error('  --include-private   把豆瓣上不公开的东西也发出去（私密日记、私密豆列、只有自己');
+  console.error('                      看得见的广播），页面上带一枚锁标。**默认不发**');
+  console.error('  --drop-notes=author,platform,unsure  再额外去掉哪几类日记（或 all）。与上面那个');
+  console.error('                      方向相反：一个放宽，一个收紧，显式写的压过默认');
   console.error('  --source-repo=<url>  页脚加一行「这个站点的源码」，指这一份站点自己的仓库；默认没有。');
   process.exit(2);
 }
@@ -78,7 +81,10 @@ rmSync(stage, { recursive: true, force: true });
 
 const canonical = readCanonical(canonDir);
 
-const priv = restrictedNotes(canonical.longform ?? []);
+// **拿原始那份点名，不是筛过的那份。** 铺进仓库是不可逆的，而预演是它前面唯一
+// 一道——印「这几条被留下了」和「这几条被去掉了」都要从完整的数据里数。
+const priv = privateContent(canonical);
+const includePrivate = args.includes('--include-private');
 const drop = (args.find((a) => a.startsWith('--drop-notes='))?.slice('--drop-notes='.length) ?? '')
   .split(',').map((x) => x.trim()).filter(Boolean);
 for (const d of drop) {
@@ -87,16 +93,12 @@ for (const d of drop) {
     process.exit(2);
   }
 }
-const dropping = new Set(
-  DROPPABLE.filter((k) => drop.includes('all') || drop.includes(k)).flatMap((k) => priv[k].map((x) => x.id)),
-);
-if (dropping.size) {
-  canonical.longform = canonical.longform.filter((rec) => !dropping.has(rec.upstream_id));
-}
 
 const t0 = Date.now();
 const r = generate({
   canonical,
+  includePrivate,
+  dropNotes: drop,
   bundlesDir,
   outDir: stage,
   themeDir: join(HERE, '..', 'theme', 'hugo'),
@@ -126,26 +128,57 @@ console.log('\n③ 这次会公开：');
 for (const [k, n] of Object.entries(byKind)) console.log(`   ${k} ${n}`);
 console.log(`   合计 ${(bytes / 1024 / 1024).toFixed(1)} MB → ${resolve(repoDir)}`);
 
-const total = priv.author.length + priv.platform.length + priv.unsure.length;
-if (total) {
-  console.log(`\n④ 有 ${total} 篇日记在豆瓣上不是公开的。**默认全部照发**，但两种的道理不一样：`);
-  const say = (key, head, tail) => {
-    if (!priv[key].length) return;
-    const gone = dropping.size && priv[key].every((x) => dropping.has(x.id));
-    console.log(`\n   ${head}（${priv[key].length} 篇）${gone ? ' —— 已按 --drop-notes 拿掉' : ''}`);
-    console.log(`   ${tail}`);
-    for (const x of priv[key]) {
-      console.log(`     · ${x.title}   note/${x.id}.html`);
-      if (x.notice) console.log(`       豆瓣的说法：${x.notice}`);
-    }
-  };
-  say('author', '作者自己设成「仅自己可见」', '发出去 = 把他藏起来的东西公开了，而且撤不回来。');
-  say('platform', '豆瓣锁掉的',
-    '**它本来就是公开的**，是豆瓣把它关掉的——发出去正是这份存档要做的事；不发 = 替豆瓣二次消音。');
-  say('unsure', '说不准', '页面上认不出来（多半是豆瓣改版），或者这份 canonical 早于这个字段。按不公开处理。');
-  console.log(`\n   要拿掉其中某一类：--drop-notes=${DROPPABLE.join(',')} 里挑（可多选，或 all）。`);
-  console.log('   什么都不加就是全部照发——这是明确的选择，不是疏忽。');
-  console.log('   （NeoDB 导出那边同一件事的处置：豆瓣锁的照常公开，作者自己藏的收成仅提及者可见。）');
+// ── ④ 豆瓣上不公开的东西，逐条点名。**要点名而不是筛完了事**：铺进仓库不可逆，
+// 而这是它前面唯一一道，所以「发了什么」和「没发什么」都要说得出来。
+{
+  const notes = priv.notes;
+  const dropped = new Set(drop.includes('all') ? DROPPABLE : drop);
+  /** 这一栏这次到底发没发。 */
+  const 发了 = (k) => !dropped.has(k) && (includePrivate || !PRIVATE_BY_DEFAULT.includes(k));
+  const total = notes.author.length + notes.platform.length + notes.unsure.length
+    + priv.doulists.length + priv.broadcasts.length;
+
+  if (total) {
+    console.log(`\n④ 有 ${total} 项在豆瓣上不是公开的`
+      + `（${includePrivate ? '这一次 --include-private 全部照发' : '默认不发，除了豆瓣锁掉的那一类'}）：`);
+
+    const say = (list, head, tail, out) => {
+      if (!list.length) return;
+      console.log(`\n   ${head}（${list.length}）—— ${out ? '**这次发出去了**' : '这次没发'}`);
+      console.log(`   ${tail}`);
+      for (const x of list) {
+        console.log(`     · ${x.title ?? JSON.stringify((x.text ?? '').slice(0, 40))}`);
+        if (x.notice) console.log(`       豆瓣的说法：${x.notice}`);
+      }
+    };
+    say(notes.author, '日记 · 作者自己设成「仅自己可见」',
+      '发出去 = 把他藏起来的东西公开了，而且撤不回来。', 发了('author'));
+    say(notes.platform, '日记 · 豆瓣锁掉的',
+      '**它本来就是公开的**，是豆瓣把它关掉的——发出去正是这份存档要做的事；不发 = 替豆瓣二次消音。',
+      发了('platform'));
+    say(notes.unsure, '日记 · 说不准',
+      '页面上认不出来（多半是豆瓣改版），或者这份 canonical 早于这个字段。「认不出来」不是「确认公开」。',
+      发了('unsure'));
+    say(priv.doulists, '豆列 · 私密', '豆瓣上只有你自己看得见。', includePrivate);
+    // **广播这一条是这次的起因，所以话要说重。** 豆瓣发一篇私密日记时会同步一条
+    // 广播，正文一字不差——日记那一页发没发根本不重要，内容从旁边这条路漏出去了。
+    say(priv.broadcasts, '广播 · 只有你自己看得见',
+      '豆瓣发私密日记时会同步一条，正文一字不差——**它绕过日记那一侧的所有开关**。',
+      includePrivate);
+
+    console.log(`\n   放宽：--include-private（全发，页面上带锁标）`);
+    console.log(`   收紧：--drop-notes=${DROPPABLE.join(',')} 里挑（可多选，或 all）`);
+    console.log('   （NeoDB 导出那边同一件事：豆瓣锁的照常公开，作者自己藏的收成仅提及者可见。）');
+  }
+
+  // **「这份 canonical 根本没有这个信息」与「没有私密的东西」是两回事。**
+  // 不说的话，用老 canonical 生成的人会以为已经查过了。
+  if (priv.unknownPrivacy.length) {
+    const 名 = { broadcasts: '广播', doulists: '豆列' };
+    console.log(`\n   ⚠ 这份 canonical 里${priv.unknownPrivacy.map((k) => 名[k] ?? k).join('、')}没有可见性信息`);
+    console.log('     （解析器 0.13.0 才开始写它），所以这一类**没有筛**，全部照发。');
+    console.log('     重跑一次解析器就有了——页面本来就在档案里，不用重新抓豆瓣。');
+  }
 }
 
 const stale = readdirSync(repoDir).filter((n) => !KEEP.has(n));

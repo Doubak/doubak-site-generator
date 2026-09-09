@@ -28,6 +28,7 @@ import {
 import { indexImages, exportImages, reallyMissing } from './images.js';
 import { buildSearchIndex } from './search.js';
 import { frontMatter } from './yaml.js';import { buildPages } from './pages.js';
+import { withoutPrivate } from './private.js';
 
 /**
  * @param {object} opts
@@ -76,7 +77,14 @@ function writeSourceRepo(tomlPath, url) {
   writeFileSync(tomlPath, text.slice(0, cut) + line + text.slice(cut), 'utf-8');
 }
 
-export function generate({ canonical, bundlesDir, outDir, clean = true, themeDir = null, sourceRepo = null }) {
+export function generate({
+  canonical, bundlesDir, outDir, clean = true, themeDir = null, sourceRepo = null,
+  includePrivate = false, dropNotes = [],
+}) {
+  // **筛选放在这儿，不放在 bin/deploy.js 里。** `npm run md` 与 `npm run site`
+  // 不走那个脚本，而安全默认值必须处处生效——只在部署那条路上过滤，等于把
+  // 「我先看看生成出来什么样」这条最常走的路留在外面。
+  canonical = withoutPrivate(canonical, { includePrivate, dropNotes });
   const p = project(canonical);
 
   if (clean) rmSync(outDir, { recursive: true, force: true });
