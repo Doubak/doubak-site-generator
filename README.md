@@ -65,7 +65,7 @@ node bin/site.js     <canonical> <bundles> [out] [--serve]
 └── public/                生成的完整静态 HTML 站点，双击 index.html 即可浏览
 ```
 
-## Hugo 二进制管理：零第三方依赖
+## Hugo 二进制管理：零 npm 依赖
 
 首次运行 `npm run site` 时会自动下载 Hugo 官方二进制文件（约 20 MB，缓存在 `.hugo/` 目录供后续复用）。但它**不是 npm 依赖包** —— 项目的 `package.json` 中的 `dependencies` 为空。
 
