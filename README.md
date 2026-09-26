@@ -178,7 +178,7 @@ npm run deploy -- <canonical> <bundles> <仓库目录>             # 正式部�
 
 `deploy` 脚本即负责自动化完成上述发布流程：先在临时目录执行构建（避免构建失败破坏目标仓库），随后将 `public/` 中的产物平铺至目标仓库根目录，并自动处理以下事项：
 
-- 自动写入 `.nojekyll` 文件，防止 GitHub Actions 或 Pages 服务默认使用 Jekyll 过滤下划线开头的静态资源文件。
+- 自动写入 `.nojekyll` 文件，防止 GitHub Pages 使用 Jekyll 处理并过滤以下划线开头的静态资源文件。
 - 保留 `CNAME`、`LICENSE`、`README.md`、`.git`、`.github` 及 `.gitignore` 等仓库管理文件不受覆盖影响。
 - 清理上次部署遗留的陈旧文件，避免残留已失效或被删除条目的孤立页面。
 
