@@ -31,7 +31,7 @@ cd ../doubak-site-generator
 npm run site -- ~/downloads/canonical ~/downloads/exports ~/downloads/site
 ```
 
-构建完成后，直接**双击 `public/index.html`** 即可在本地浏览器中直接浏览，无需启动任何本地 Web 服务器（详见后文「无需服务器即可直接浏览」一节）。
+构建完成后，直接**双击 `public/index.html`** 即可在本地浏览器中浏览，无需启动任何本地 Web 服务器（详见后文「无需服务器即可直接浏览」一节）。
 
 为何第二步仍需输入 bundle：canonical 专注于结构化纯文本（方便使用 `jq` 检索，不包含二进制数据），而**图像等静态资源的原始字节存储于 bundle 归档中**，二者缺一不可。
 
