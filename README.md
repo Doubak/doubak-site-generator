@@ -78,7 +78,7 @@ npm 社区中的 `hugo-bin` 等封装包本质上也是下载官方二进制，�
   ```sh
   curl -sSfL https://github.com/gohugoio/hugo/releases/download/v0.164.0/hugo_0.164.0_checksums.txt
   ```
-  哈希不匹配时立即报错终止，而非发出警告后继续执行 —— 确保本地执行的二进制文件绝对安全可信。
+  哈希不匹配时立即报错终止，而非发出警告后继续执行 —— 避免执行与仓库中固定校验值不一致的下载内容。
 - **优先使用系统 PATH 中的 hugo**：若本地环境中已安装 Hugo，直接复用既有程序，不重复下载。
 
 自动下载逻辑当前支持 Linux；macOS 与 Windows 用户建议通过系统包管理器安装（`brew install hugo` / `winget install Hugo.Hugo`），`npm run site` 会自动识别并复用。
