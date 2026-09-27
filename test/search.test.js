@@ -45,13 +45,13 @@ describe('索引里该有什么', () => {
     assert.equal(rows[0].c, '当年觉得很好');
   });
 
-  test('**没有正文的广播不收** —— 否则结果里全是「想看 X」', () => {
+  test('**过滤无正文的纯动作广播** —— 避免索引充斥「想看」类模板条目', () => {
     // 纯标记动作在标记那一条里已经搜得到了，收进来只会把结果稀释掉。
     const { rows } = buildSearchIndex(proj({ broadcasts: [pbc({ text: null }), pbc({ text: '有正文' })] }));
     assert.equal(rows.filter((r) => r.t === 'b').length, 1);
   });
 
-  test('**路径不带扩展名** —— 那是 SSG 的决定，不是索引的', () => {
+  test('**索引路径省略文件扩展名** —— 扩展名由静态站点生成器决定', () => {
     // 带上 .html 就把一种固定链接方案焊进了数据里，而这份索引是给任何 SSG 用的。
     const { rows } = buildSearchIndex(proj({ marks: [pmark()], broadcasts: [pbc()] }));
     for (const r of rows) assert.ok(!/\.(html|md)$/.test(r.u), `${r.u} 不该带扩展名`);
@@ -69,7 +69,7 @@ describe('索引里该有什么', () => {
     assert.deepEqual(rows[0].a, ['重返沉默之丘(台)', '寂静岭2真人版']);
   });
 
-  test('没有又名时**不要那个键**，而不是设成 undefined', () => {
+  test('无别名时省略对应字段，避免写入 undefined', () => {
     // JSON.stringify 会把 undefined 的键整个丢掉，于是对象与产出对不上。
     const { rows, js } = buildSearchIndex(proj({ marks: [pmark({ aliases: [] })] }));
     assert.ok(!('a' in rows[0]));
@@ -106,7 +106,7 @@ describe('索引里该有什么', () => {
 });
 
 describe('产出的是 .js', () => {
-  test('**挂成全局变量，而不是等着被 fetch**', () => {
+  test('**挂载至全局变量，避免依赖异步 fetch 加载**', () => {
     // 浏览器在 file:// 下会拦掉 fetch 与 XHR，但 <script> 照常工作。
     // 用 fetch 的话，站点在 http 下能搜、双击打开就废。
     const { js } = buildSearchIndex(proj({ marks: [pmark()] }));
@@ -125,7 +125,7 @@ describe('搜索页', () => {
   const html = existsSync(join(THEME, 'layouts/_default/search.html'))
     ? readFileSync(join(THEME, 'layouts/_default/search.html'), 'utf-8') : '';
 
-  test('**用 script 标签载索引，不用 fetch**', () => {
+  test('**使用 script 标签加载索引，避免依赖 fetch**', () => {
     assert.ok(html, '搜索页模板不见了');
     assert.match(html, /createElement\('script'\)/);
     assert.ok(!/fetch\(|XMLHttpRequest/.test(html), 'file:// 下这两个都会被拦');
@@ -145,7 +145,7 @@ describe('搜索页', () => {
     assert.match(html, /onerror/);
   });
 
-  test('**先转义再插高亮标记** —— 顺序反了就是个 XSS', () => {
+  test('**先执行转义再插入高亮标签** —— 防止 XSS 注入风险', () => {
     // 用户写的字里有尖括号很正常（实测「From <May December>」）。
     // 不按字符位置切源码去查其中一处：多加一个高亮函数就会漏掉新的那个，
     // 而漏掉的那次正是没人看的那次。这里查的是**每一处** <mark> 插入点。
@@ -161,7 +161,7 @@ describe('搜索页', () => {
     assert.match(html, /'\.html">' \+ titleHtml/);
   });
 
-  test('**占位标题不高亮** —— 占位符不是内容', () => {
+  test('**占位标题禁止高亮** —— 占位符不属于真实内容', () => {
     // 「广播」「未知作品」是没标题时填的字，搜它们时标黄等于说标题命中了。
     assert.ok(!/highlight\(title/.test(html), '高亮的必须是 d.n，不是回退后的 title');
   });
@@ -171,7 +171,7 @@ describe('搜索页', () => {
     assert.match(html, /inTitle = \(r\.n/);
   });
 
-  test('零结果就说零结果', () => {
+  test('无匹配结果时明确展示空状态提示', () => {
     assert.match(html, /没有找到/);
   });
 });
@@ -188,11 +188,11 @@ describe('高亮函数（从模板里抠出来真跑一遍）', () => {
   assert.ok(src.length > 400, `只抠到 ${src.length} 个字符，切法失效了`);
   const { highlight } = new Function(`${src}; return { highlight: highlight };`)();
 
-  test('命中处包上 <mark>', () => {
+  test('高亮匹配项使用 <mark> 标签包裹', () => {
     assert.equal(highlight('寂静岭2', '寂静岭'), '<mark>寂静岭</mark>2');
   });
 
-  test('**全部命中都标**，不只第一处', () => {
+  test('**标记全部命中项而非仅首处匹配**', () => {
     assert.equal(highlight('寂静岭2 寂静岭', '寂静岭'),
       '<mark>寂静岭</mark>2 <mark>寂静岭</mark>');
   });
@@ -201,7 +201,7 @@ describe('高亮函数（从模板里抠出来真跑一遍）', () => {
     assert.equal(highlight('May December', 'may'), '<mark>May</mark> December');
   });
 
-  test('没命中就原样返回', () => {
+  test('未命中时原样返回输入文本', () => {
     assert.equal(highlight('盗梦空间', '寂静岭'), '盗梦空间');
   });
 
@@ -213,7 +213,7 @@ describe('高亮函数（从模板里抠出来真跑一遍）', () => {
       '&lt;<mark>img</mark> src=x onerror=alert(1)&gt;');
   });
 
-  test('空查询直接转义返回，不死循环', () => {
+  test('空查询直接转义返回且不产生死循环', () => {
     assert.equal(highlight('<a>', ''), '&lt;a&gt;');
   });
 });

@@ -99,14 +99,14 @@ describe('往返：写进去什么，读回来就是什么', () => {
     assert.ok(!frontMatter(v).includes('|-'), '有前导空白时不该用块标量');
   });
 
-  test('控制字符不丢 —— 它们确实出现在从网页粘来的字里', () => {
+  test('控制字符完整保留 —— 兼容网页复制内容的控制字符', () => {
     const v = { comment: `退格\u0008与竖表\u000b` };
     assert.deepEqual(roundTrip(v), v);
   });
 });
 
 describe('那些「看起来像别的类型」的字符串', () => {
-  test('**`NO` 不能变成 false** —— YAML 最有名的坑', () => {
+  test('**字符串 `NO` 禁止被解析为布尔值 false**', () => {
     // 挪威国家代码 NO 变成 false 是 YAML 的经典事故。豆瓣标签里出现单个词
     // 完全不稀奇。
     for (const s of ['no', 'NO', 'yes', 'Y', 'n', 'true', 'False', 'on', 'off', 'null', '~']) {
@@ -114,7 +114,7 @@ describe('那些「看起来像别的类型」的字符串', () => {
     }
   });
 
-  test('`007` 不能变成 7', () => {
+  test('字符串 `007` 禁止被截断为数字 7', () => {
     for (const s of ['007', '1e3', '.5', '-0', '1_000']) {
       assert.deepEqual(roundTrip({ tag: s }), { tag: s }, s);
     }

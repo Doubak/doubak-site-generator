@@ -136,7 +136,7 @@ describe('页面', () => {
     assert.match(markPage(p), /^douban_cover: null$/m);
   });
 
-  test('**整个产出里一个 doubanio 的图片地址都不许有**', () => {
+  test('**生成产物中严禁包含任何 doubanio 图片地址**', () => {
     // 上面那条按字段查，这条按产物查——`markPage` 修好了，别的页面类型还可能
     // 从别处漏出去。判据是那句印在每一页页脚上的话：「这个页面也不发一个外部请求」。
     //
@@ -262,7 +262,7 @@ describe('「什么时候 → 说了什么」', () => {
     assert.ok(!/改过|编辑过|修改/.test(text), '不该断言用户改过');
   });
 
-  test('**同一句话去重时，精度高的优先** —— 补零的时间不许挤掉真的', () => {
+  test('**同内容去重保留更高精度时间戳** —— 禁止低精度补零时间覆盖真实时间', () => {
     // 标记只到天，canonical 会把它补成 T00:00:00；广播到秒。单纯按早晚挑的话，
     // 补出来的 00:00:00 永远排在同一天的广播前面，于是留下补零的、丢掉真的——
     // 而 partial_date.precision 存在的全部意义就是防这件事。实测踩到过。
@@ -463,7 +463,7 @@ describe('按状态筛选', () => {
     assert.deepEqual(bad, [], '首页链接里出现了绝对路径');
   });
 
-  test('**首页封面要能悬停看名字**，且带引号的名字不许把链接切断', () => {
+  test('**首页封面支持悬停展示标题**，且含引号的标题禁止截断链接属性', () => {
     // 首页那一行只有封面没有字，不给 title 的话想知道是哪一部就只能点进去。
     // `alt` 给读屏器、`title` 给鼠标——两者内容一样，用途不一样。
     const [p] = project({ marks: [mark()], subjects: [subject()] }).marks;
@@ -491,7 +491,7 @@ describe('按状态筛选', () => {
     assert.equal(mdTitleAttr('反斜杠\\结尾'), '反斜杠\\\\结尾');
   });
 
-  test('**右边那道渐隐只给摆得满的行** —— 不许暗示数据比实际多', () => {
+  test('**右侧渐隐遮罩仅应用于溢出行** —— 避免误导显示超出实际的数据量', () => {
     // 渐隐的意思是「后面还有」。而舞台剧一共只有 3 部作品——给一行 3 张图也淡出去，
     // 那是在暗示还有没显示出来的东西，而其实一个都没有。
     const css = readFileSync(join(THEME_DIR, 'static/site.css'), 'utf-8');
@@ -580,7 +580,7 @@ describe('按状态筛选', () => {
   });
 });
 
-describe('删掉再重标：一个作品仍然只有一页，而且旧的那次不许消失', () => {
+describe('删除后重标：同一作品保持单一页面，且历史记录完整保留', () => {
   /**
    * ## 真实来源
    *
@@ -643,7 +643,7 @@ describe('删掉再重标：一个作品仍然只有一页，而且旧的那次�
     assert.deepEqual(forSubject[0].tags, ['2010']);
   });
 
-  test('**旧那次不许消失**，它并进时间线', () => {
+  test('**历史标记记录完整保留**，合并纳入时间线展示', () => {
     const p = project(reMarked());
     const m = p.marks.find((x) => x.subjectId === '3541415');
     const days = m.timeline.map((r) => (r.at ?? '').slice(0, 10));
@@ -801,7 +801,7 @@ describe('广播', () => {
     assert.equal(broadcastMonthPath('2021-11'), 'broadcast/2021-11.md');
   });
 
-  test('**没有时间的广播不能编一个日期出来** —— 编了会让 Hugo 整站构建失败', () => {
+  test('**缺少时间戳的广播禁止虚构日期** —— 避免导致 Hugo 构建失败', () => {
     // 3411 条 2026 年抓到的广播全都带时间，所以这条路一直没人走过。而前代工具
     // 2014 年抓下来的档案里有一条「MewX 开始收听自己的豆瓣FM」——豆瓣自己生成的
     // 系统动态，整条没有 created_at。解析器如实记成 posted_at: null。
@@ -1004,7 +1004,7 @@ describe('广播', () => {
     assert.equal(r.images.remote.length, new Set(r.images.remote).size);
   });
 
-  test('**产出里一个 doubanio 的封面地址都不许有** —— 与上一条是同一件事的两面', () => {
+  test('**生成产物中严禁包含任何 doubanio 封面地址**', () => {
     // 上一条断言的是「数字里没有它」，这一条断言的是「页面上没有它」。两条都要：
     // 只留前者的话，哪天封面又退回豆瓣的 URL，那个数字仍然是 0，而离线保证已经破了。
     const out = mkdtempSync(join(tmpdir(), 'doubak-nocover-'));
@@ -1066,7 +1066,7 @@ describe('广播', () => {
     assert.ok(!/★|☆/.test(text), '没打分的广播不该出现星');
   });
 
-  test('**归并之后星数不许丢** —— 时间来自广播、分可能在标记那一侧', () => {
+  test('**归并后评分星级完整保留** —— 确保广播与标记的评分信息不丢失', () => {
     // 同一次「看过」会同时出现在广播（秒级、常常没短评）和标记修订（有短评、
     // 只到天）里，归并成一条。只按被留下的那一条取值的话，星数会时有时无。
     const p = project({
@@ -1104,7 +1104,7 @@ describe('广播', () => {
     assert.ok(!/!\[\]\(\/covers/.test(text), '封面的 alt 不许是空的');
   });
 
-  test('**条目被豆瓣删了，广播里那个名字还在** —— 说得出，但不给链接', () => {
+  test('**条目被平台删除但广播中保留标题时** —— 如实展示名称但不生成链接', () => {
     // 条目被删之后标记列表里就没有它了，而广播还在。页面上原来只剩「想看」两个字
     // 后面空着，看起来像抓漏了——而名字一直就在广播的卡片里（发布即冻结，
     // 所以那是那一刻的名字）。实测 162 条这样的广播，104 条是真作品。
@@ -1291,7 +1291,7 @@ describe('Hugo 骨架', () => {
     }
   });
 
-  test('**首页的「看全部」胶囊不许把出处也画成按钮**', () => {
+  test('**首页「查看全部」胶囊按钮严禁将来源链接错误渲染为按钮**', () => {
     // 那条规则说的是「每节末尾那个看全部」，写的却是「整段只有一个链接的那一段」
     // ——又一次代理。判据用 title，与广播页那边是同一把钥匙，只是从另一侧用。
     const css = readFileSync(join(THEME, 'static/site.css'), 'utf-8');
@@ -1304,7 +1304,7 @@ describe('Hugo 骨架', () => {
       '一条「看全部」规则都没扫到，正则大概坏了');
   });
 
-  test('**样式表里一个外部地址都不许有**', () => {
+  test('**样式表中严禁包含任何外部引用地址**', () => {
     // 页脚那句「这个页面也不发一个外部请求」管的就是这个。图标全部内联成
     // `data:` URI；哪天有人把它换成 doubanio 上的一张图，页面照样渲染、
     // 照样好看，只是那句话变成了假话——与封面回退那次是同一个形状。
@@ -1351,7 +1351,7 @@ describe('Hugo 骨架', () => {
     );
   });
 
-  test('**只在广播页缩略附图** —— 日记正文里的插图不许跟着缩', () => {
+  test('**仅在广播时间线缩略显示附图** —— 日记正文插图保持原始尺寸', () => {
     // 两者在 Markdown 里长得一模一样（自成一段的 `![](path)`），该有的大小却相反：
     // 日记的插图是文章的一部分，要看得清；广播的附图是一次发九张十八张的随手拍。
     // Markdown 分不出来也不该分——版式是主题的事，所以靠 <main> 上的小节 class 分。
@@ -1413,7 +1413,7 @@ describe('Hugo 骨架', () => {
     assert.ok(month > item, `月分隔 ${month}px 不比条分隔 ${item}px 重`);
   });
 
-  test('**封面与附图靠「链接指向哪儿」区分，而且不许被 :only-child 那条盖掉**', () => {
+  test('**封面与附图依据目标链接区分，且禁止被 :only-child 样式规则覆盖**', () => {
     // 两者在 HTML 里都是 `<p>` 里的 `<a><img>`，该有的大小差着一个数量级：
     // 封面 2.6em 贴在一行字旁边，附图 9rem 排成一排。判据是附图链到图片自己
     // （`…/uploads/p1.jpg`），封面链到作品页（`…/movie/1.html`）。
@@ -1506,7 +1506,7 @@ describe('Hugo 骨架', () => {
     );
   });
 
-  test('**标签名不许用 Hugo 自己那个 `.Title`** —— 它随遍历顺序变', () => {
+  test('**标签名称禁止使用 Hugo 默认的 `.Title`** —— 避免受遍历顺序影响', () => {
     // Hugo 把分类词大小写合并（`Netflix` 与 `netflix` 归成一个页面，这是对的），
     // 但**显示成哪一种写法取的是它先遇到的那个**，而那取决于页面遍历顺序。
     // 实测：同一份 canonical 连着生成两次，`tags/key.html` 一次是 `Key`、
@@ -1529,7 +1529,7 @@ describe('Hugo 骨架', () => {
       '不许首字母大写 / 全大写 —— 那是替用户规范化他的标签');
   });
 
-  test('**导航顺序是写死的，但名单之外的小节一个都不许丢**', () => {
+  test('**导航保持固定顺序，且预设之外的小节必须完整保留**', () => {
     // 顺序不按字母序——字母序是「没有想过顺序」的意思，而广播是这份存档里最不可
     // 替代的一条（发布即冻结、可被静默删除），该排第一。
     //
@@ -1554,7 +1554,7 @@ describe('Hugo 骨架', () => {
     }
   });
 
-  test('**`.section-*` 后面不许再跟 `main`** —— 那是在找 main 里面的 main', () => {
+  test('**`.section-*` 选择器后严禁紧接 `main`** —— 避免错误选择深层嵌套元素', () => {
     // `section-home` / `section-broadcast` 这些类挂在 `<main>` 自己身上
     // （`<main class="section-{{ .Section }}">`），所以 `.section-home main ul`
     // 要求的是「main 里面还有一个 main」——永远匹配不上。
@@ -1568,7 +1568,7 @@ describe('Hugo 骨架', () => {
     assert.deepEqual(dead, [], '这些选择器永远匹配不上');
   });
 
-  test('**页脚那句「与豆瓣无关」不许删**', () => {
+  test('**页脚必须保留「与豆瓣无关」免责声明**', () => {
     // 配色像豆瓣是有意的（这是你自己的豆瓣存档），但长得像和冒充是两回事，
     // 而这一句就是两者之间的线。
     const base = readFileSync(join(THEME, 'layouts/_default/baseof.html'), 'utf-8');
@@ -1581,7 +1581,7 @@ describe('Hugo 骨架', () => {
     assert.match(stars, /\{\{ with \. \}\}/, '要用 with 把「没有评分」整段跳过');
   });
 
-  test('**骨架里不许有 content/**', () => {
+  test('**模板骨架中严禁包含预设 content/** 目录', () => {
     // 有的话会盖掉刚生成的那 3098 个页面，而产出目录看起来完全正常。
     assert.ok(!existsSync(join(THEME, 'content')), '骨架不该带 content/');
   });
@@ -1596,7 +1596,7 @@ describe('Hugo 骨架', () => {
     assert.equal(r.theme, THEME);
   });
 
-  test('**不给 themeDir，产出里不许有任何 Hugo 专属的东西**', () => {
+  test('**未指定 themeDir 时，产出目录严禁包含任何 Hugo 专属文件**', () => {
     // Markdown 才是这个工具的产物，HTML 只是它的一个消费者。有人要把 content/
     // 塞进 Astro / Eleventy / Jekyll，那时候多出一个 hugo.toml 不只是碍事——
     // Hugo 之外的 SSG 见到它多半会当成待渲染的内容文件。
@@ -1672,7 +1672,7 @@ describe('Hugo 骨架', () => {
     assert.deepEqual(missing, [], `模板引用了生成器不写的键：${missing.join(' ')}`);
   });
 
-  test('**`:has()` 里不许再套一个 `:has()`** —— 整条选择器会被丢掉，一句警告都没有', () => {
+  test('**严禁在 `:has()` 伪类中嵌套 `:has()`** —— 避免导致整个选择器静默失效', () => {
     // 规范禁止 `:has()` 嵌套，浏览器的做法是把**整条选择器**当成非法的扔掉。
     // CSS 没有语法错误这一说，扔掉的时候不出声，于是这条规则就当从来没写过。
     //
@@ -1761,14 +1761,14 @@ describe('用户写的字必须原样呈现', () => {
   // 这一组是拿真的 Hugo 量出来的，不是照 CommonMark 规范推的。
   // 实测那份档案 2831 段自撰文本里有 62 段会被 Markdown 悄悄改写。
 
-  test('**颜文字不许变成斜体** —— 实测 24 处', () => {
+  test('**颜文字严禁被错误解析为斜体 Markdown 语法**', () => {
     // `_(:з」∠)_` 被渲染成 <em>(:з」∠)</em>，下划线连同语气一起没了。
     // 这是中文互联网最常见的那个颜文字，而它恰好长得像 Markdown 的强调。
     assert.equal(plainText('_(:з」∠)_'), '\\_(:з」∠)\\_');
     assert.equal(plainText('(*/ ω \\*)'), '(\\*/ ω \\\\\\*)');
   });
 
-  test('**尖括号里的字不许整个消失**', () => {
+  test('**尖括号中的文本内容必须完整保留**', () => {
     // `From <May December>` 在页面上只剩 `From ` —— goldmark 当 <May December>
     // 是裸 HTML 直接丢掉。这一类最严重：页面上什么都不剩，看不出这儿本来有字。
     assert.equal(plainText('From <May December>'), 'From &lt;May December&gt;');
@@ -1824,7 +1824,7 @@ describe('用户写的字必须原样呈现', () => {
     }]), /From &lt;May December&gt;/);
   });
 
-  test('**长文正文里解析器插的图片标记不许被转义**', () => {
+  test('**长文正文中解析器生成的图片标记严禁被转义**', () => {
     // 正文混着两种东西：用户写的字，和解析器插进去的 ![](url)。
     // 一起转义的话，图就变成一行字面文本了。
     const [p] = project({ longform: [{
@@ -1906,7 +1906,7 @@ describe('动作句里的链接指到哪儿', () => {
       { user_id: '82160871' }), want, '本来就是数字的不动');
   });
 
-  test('拿不到 uid 时只去查询串，不瞎改路径', () => {
+  test('未能获取 uid 时仅过滤查询参数，保持原始路径不变', () => {
     const u = project({ broadcasts: [{ ...bc({ action: '想看' }),
       url: 'https://www.douban.com/people/mewcatcher/status/1/?_spm_id=x', account: null }] }).broadcasts[0].url;
     assert.equal(u, 'https://www.douban.com/people/mewcatcher/status/1/');
@@ -1960,7 +1960,7 @@ describe('动作句里的链接指到哪儿', () => {
     assert.deepEqual(b.actionParts[1], { text: '游戏购买小账本', href: 'doulist/45473911.md' });
   });
 
-  test('**文字两边的空格不许进链接** —— 否则空格上会画下划线', () => {
+  test('**文本两端空白字符严禁纳入超链接范围** —— 避免下划线样式溢出', () => {
     const b = withParts([{ text: '收藏到 ' }, { text: ' 名字 ', url: 'https://douc.cc/x' }]);
     const md = broadcastMonthPage('2021-11', [b]);
     assert.match(md, / \[名字\]\(https:\/\/douc\.cc\/x\) /);
@@ -1989,7 +1989,7 @@ describe('页脚：这个站点自己的源码', () => {
     return readFileSync(join(out, 'hugo.toml'), 'utf-8');
   };
 
-  test('**不传就一个字都不出** —— 默认绝不能是我们那个样张仓库', () => {
+  test('**未指定时完全不输出** —— 默认严禁输出样例仓库地址', () => {
     const toml = build({});
     assert.ok(!/sourceRepo/.test(toml), `默认不该写 sourceRepo：\n${toml}`);
     assert.ok(!/doubak-site-generator-sample/.test(toml),
@@ -2043,14 +2043,14 @@ describe('页脚：这个站点自己的源码', () => {
  * 生成出来的页面**一个字都没提**——正文照登，看着像什么都没发生过。一份为
  * 「留住豆瓣拿掉的东西」而存在的存档，把「豆瓣把它拿下了」这件事漏掉了。
  */
-describe('日记的可见性写进页面', () => {
+describe('日记可见性状态写入页面', () => {
   const note = (over) => ({
     kind: 'note', id: '1', url: 'https://www.douban.com/note/1/', title: '标题',
     body: '正文', publishedAt: null, publishedAtRaw: null, location: null,
     rating: null, subjectUrl: null, revisionCount: 1, lastSeenAt: null, ...over,
   });
 
-  test('**豆瓣锁的：说出来，而且逐字引用豆瓣那句判词**', () => {
+  test('**被平台锁定的内容：明确标注并如实引用平台封禁提示**', () => {
     const t = longformPage(note({
       visibility: 'private', restrictedBy: 'platform',
       restrictionNotice: '含有违规或引发不良讨论的内容，内容仅自己可见，请勿发布同类信息',
@@ -2061,7 +2061,7 @@ describe('日记的可见性写进页面', () => {
     assert.match(t, /正文/);
   });
 
-  test('**写进正文，不是只写进 front matter**', () => {
+  test('**封禁说明写入正文而非仅记录于 front matter**', () => {
     // 「Markdown 是产品，HTML 只是它的一个消费者」——只写 front matter 的话，
     // 这件事在纯 Markdown 那棵树里根本不存在，换个主题就没了。而这不是版式，是内容。
     const t = longformPage(note({ visibility: 'private', restrictedBy: 'platform', restrictionNotice: '某某理由' }));
@@ -2069,18 +2069,18 @@ describe('日记的可见性写进页面', () => {
     assert.match(body, /某某理由/, 'front matter 之外一个字都没有');
   });
 
-  test('作者自己设的：说一句，不评论，也不编理由', () => {
+  test('作者自行设为仅自己可见：如实标注，不做主观推测', () => {
     const t = longformPage(note({ visibility: 'private', restrictedBy: 'author' }));
     assert.match(t, /设成了「仅自己可见」/);
     assert.doesNotMatch(t, /被豆瓣锁/);
   });
 
-  test('**公开的什么都不写**', () => {
+  test('**公开内容不添加任何额外状态标注**', () => {
     const t = longformPage(note({ visibility: 'public' }));
     assert.doesNotMatch(t, /仅自己可见/);
   });
 
-  test('**说不准的也什么都不写** —— 在页面上写一句猜的比不写更糟', () => {
+  test('**状态不确定时不添加标注** —— 避免在页面呈现猜测性描述', () => {
     // 它照样会出现在部署预演里（那一步的判据是「不是 public 就点名」），
     // 但页面上不能替豆瓣或替用户说一句我们并不知道的话。
     for (const v of ['unknown', null, undefined]) {
@@ -2088,7 +2088,7 @@ describe('日记的可见性写进页面', () => {
     }
   });
 
-  test('**豆瓣那句判词要转义** —— 它来自页面，和用户正文一样', () => {
+  test('**平台封禁提示文本必须转义**', () => {
     const t = longformPage(note({
       visibility: 'private', restrictedBy: 'platform', restrictionNotice: '含有*违规*内容_见_下',
     }));
@@ -2096,12 +2096,12 @@ describe('日记的可见性写进页面', () => {
     assert.match(t, /\\_见\\_/, '下划线没转义');
   });
 
-  test('豆瓣锁了却没给理由，也不留白句', () => {
+  test('平台锁定但未提供原因时，不产生空白文案', () => {
     const t = longformPage(note({ visibility: 'private', restrictedBy: 'platform', restrictionNotice: null }));
     assert.match(t, /豆瓣没有给出理由/);
   });
 
-  test('front matter 里两个字段都在 —— 主题排版与部署预演都要读它', () => {
+  test('front matter 完整包含两个隐私字段 —— 供主题排版与部署校验读取', () => {
     const t = longformPage(note({ visibility: 'private', restrictedBy: 'author' }));
     assert.match(t, /^douban_visibility: private$/m);
     assert.match(t, /^douban_restricted_by: author$/m);
