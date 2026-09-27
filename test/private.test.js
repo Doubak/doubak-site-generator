@@ -44,7 +44,7 @@ describe('豆瓣上不公开的日记', () => {
     assert.equal(b.author.length + b.platform.length + b.unsure.length, 0);
   });
 
-  test('**缺失隐私字段的历史规范记录按不确定处理，不视为公开**', () => {
+  test('**缺少隐私字段的老 canonical 按不确定处理，不视为公开**', () => {
     // 加这个字段之前生成的 canonical 里，visibility 根本不存在。当成公开的话，
     // 用旧档案部署一次就把该拦的全放出去了——而这正是这条链路上最坏的方向。
     const b = notesOf([rec('note', '1', { title: '老档案' })]);
