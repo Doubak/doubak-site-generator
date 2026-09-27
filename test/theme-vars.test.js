@@ -72,7 +72,7 @@ describe('主题的 CSS 变量', () => {
     assert.ok(definedIn(css).size >= 20, 'site.css 里的定义数不对');
   });
 
-  test('**明暗两套主题均须配置高亮色** —— 保证所有主题下的命中可见性', () => {
+  test('**明暗两套主题都定义了高亮背景色和文本色**', () => {
     const at = css.indexOf('prefers-color-scheme: dark');
     assert.ok(at > 0, '深色模式那一段不见了');
     const light = definedIn(css.slice(0, at));
