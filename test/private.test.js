@@ -38,27 +38,27 @@ describe('豆瓣上不公开的日记', () => {
     assert.match(b.platform[0].notice, /含有违规/);
   });
 
-  test('**公开的一篇都不许进名单**', () => {
+  test('**公开内容严禁包含于过滤名单**', () => {
     // 进了的话这份名单每次部署都有几百条，而一份永远有条目的名单是没人看的名单。
     const b = notesOf([rec('note', '1', { visibility: 'public' })]);
     assert.equal(b.author.length + b.platform.length + b.unsure.length, 0);
   });
 
-  test('**没有这个字段的老 canonical 算「说不准」，不算公开**', () => {
+  test('**缺少隐私字段的老 canonical 按不确定处理，不视为公开**', () => {
     // 加这个字段之前生成的 canonical 里，visibility 根本不存在。当成公开的话，
     // 用旧档案部署一次就把该拦的全放出去了——而这正是这条链路上最坏的方向。
     const b = notesOf([rec('note', '1', { title: '老档案' })]);
     assert.deepEqual(b.unsure.map((x) => x.id), ['1']);
   });
 
-  test('**评论不进名单** —— 它恒为 null，因为豆瓣没给评论这个功能', () => {
+  test('**评论内容不纳入过滤名单** —— 固定为 null，平台未提供评论隐私设置', () => {
     // 实测 2 篇评论页上「私密」「仅自己」「可见」一个字都没有，连容器都不存在。
     // 让它们进「说不准」的话，每次部署都会挂着两条谁也处理不了的东西。
     const b = notesOf([rec('review', '1', { title: '一篇评论' })]);
     assert.equal(b.unsure.length, 0);
   });
 
-  test('**私密但认不出是谁设的 → author，不是 platform**', () => {
+  test('**来源未知的私密内容归为 author 而非 platform**', () => {
     // platform 要正面证据（豆瓣那条通告）。反过来默认的话，一篇作者自己藏的日记
     // 会被说成「豆瓣锁的」——那是在替用户编造一件豆瓣没做过的事。
     const b = notesOf([rec('note', '1', { visibility: 'private' })]);
@@ -66,7 +66,7 @@ describe('豆瓣上不公开的日记', () => {
     assert.equal(b.platform.length, 0);
   });
 
-  test('取最后一条修订 —— 一篇日记可能是先公开、后来才被锁的', () => {
+  test('以最新修订版本为准 —— 一篇日记可能先公开、后来被锁定', () => {
     const r = rec('note', '1', { visibility: 'public' });
     r.revisions.push({ fields: { title: '后来被锁了', visibility: 'private', restricted_by: 'platform' } });
     assert.deepEqual(notesOf([r]).platform.map((x) => x.id), ['1']);
@@ -96,7 +96,7 @@ describe('私密广播与私密豆列', () => {
     ],
   });
 
-  test('**默认三种都不发** —— 这次的起因是广播那条路', () => {
+  test('**默认均不发布三种私密数据**', () => {
     // 豆瓣发一篇私密日记时会同步一条广播，正文一字不差。**它绕过日记那一侧的
     // 所有开关**——实测那篇日记的全文因此出现在样张站的首页上。
     const out = withoutPrivate(canonical());
@@ -105,14 +105,14 @@ describe('私密广播与私密豆列', () => {
     assert.deepEqual(out.doulists.map((r) => r.upstream_id), ['d2']);
   });
 
-  test('--include-private 三种都发', () => {
+  test('--include-private 包含全部三种私密数据', () => {
     const out = withoutPrivate(canonical(), { includePrivate: true });
     assert.equal(out.longform.length, 1);
     assert.equal(out.broadcasts.length, 2);
     assert.equal(out.doulists.length, 2);
   });
 
-  test('**豆瓣锁掉的那一篇默认照发** —— 09-07 那条决定没变', () => {
+  test('**被平台锁定的长文内容默认正常发布**', () => {
     // 它之所以不公开，恰恰因为它曾经是公开的。跟着豆瓣一起收起来，这份存档就白存了。
     const c = { longform: [rec('note', 'p1', { visibility: 'private', restricted_by: 'platform' })] };
     assert.equal(withoutPrivate(c).longform.length, 1);
@@ -125,7 +125,7 @@ describe('私密广播与私密豆列', () => {
     );
   });
 
-  test('**老 canonical 里一条都不筛** —— 否则整条时间线被清空', () => {
+  test('**历史规范数据不做额外过滤** —— 避免清空整条时间线', () => {
     // 0.13.0 之前每一条广播都没有这个字段。照「null 当私密」办，就是把实测 3429 条
     // 广播全部从站点上抹掉——**一个破坏性大到没人敢用的默认值，等于没有默认值**。
     // 判据是整个数据集：一条非 null 都没有，就说明这份 canonical 根本没这个信息。
@@ -142,7 +142,7 @@ describe('私密广播与私密豆列', () => {
     assert.deepEqual(withoutPrivate(mixed).broadcasts.map((r) => r.upstream_id), ['b2']);
   });
 
-  test('**点名时也要分清「没有私密的」和「没有这个信息」**', () => {
+  test('**明确区分「无私密内容」与「缺失隐私元数据」**', () => {
     // 老 canonical 上点名是假的：每一条都会被列出来。那种情况下该报的是
     // 「这份 canonical 没有这个信息」，而不是「这 3429 条是私密的」。
     const old = { longform: [], broadcasts: [bc('b1', { text: '甲' })], doulists: [] };
@@ -157,7 +157,7 @@ describe('私密广播与私密豆列', () => {
   });
 });
 
-test('**发出去的私密广播，页面上要看得出来**', async () => {
+test('**发布的私密广播需在页面提供明确标识**', async () => {
   // 走到这一步说明加了 `--include-private`。一个看起来和别人一样的公开条目，
   // 实际来自只有自己看得见的时间线——不说，用户就不知道自己刚发出去了什么。
   const { broadcastBlock } = await import('../src/markdown.js');

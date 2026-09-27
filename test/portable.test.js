@@ -56,7 +56,7 @@ test('pages.js / image-index.js 及其传递依赖都不 import node: 内建模�
   assert.deepEqual(bad, [], `这几个文件扩展要原样拿走，不能碰内建模块：\n${bad.join('\n')}`);
 });
 
-test('generate.js 仍然是那个做 I/O 的，没把逻辑收回去', async () => {
+test('generate.js 维持 I/O 职责边界，未回退核心生成逻辑', async () => {
   // 反向的一条：`pages.js` 干净不代表分工还在。如果哪天有人把排页面的代码
   // 又抄回 `generate.js`，两边就各有一份，而分叉的样子是「命令行出的树和
   // 扩展出的树不一样」——少一页、多一页、次序不同，打开都很正常。
@@ -66,7 +66,7 @@ test('generate.js 仍然是那个做 I/O 的，没把逻辑收回去', async () 
   assert.ok(!/const SECTION_ORDER/.test(gen), '小节顺序又被抄回 generate.js 了');
 });
 
-test('images.js 只剩读字节，判定在 image-index.js 里', async () => {
+test('images.js 仅保留字节读取，判定逻辑归入 image-index.js', async () => {
   // 「哪张图是哪张」曾经和「怎么把它读出来」搅在一起。扩展要的是前者：
   // 只按 URL 找封面会漏掉 95 张明明就在档案里的图，而那条判定必须两边一致。
   const img = await readFile(join(SRC, 'images.js'), 'utf-8');

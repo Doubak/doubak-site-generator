@@ -50,7 +50,7 @@ function referencesIn(text) {
 }
 
 describe('主题的 CSS 变量', () => {
-  test('**引用到的每一个都定义过** —— 拼错不会报错，只会静默地不生效', () => {
+  test('**所引用的 CSS 变量均已完整定义** —— 避免拼写错误导致静默失效', () => {
     const defined = definedIn(css);
     const missing = [];
 
@@ -64,7 +64,7 @@ describe('主题的 CSS 变量', () => {
     assert.deepEqual(missing, [], `这些变量没有定义过：\n  ${missing.join('\n  ')}`);
   });
 
-  test('这个检查不能是空转的', () => {
+  test('校验逻辑有效执行而非空跑', () => {
     // 第一版差点写成恒真：正则若一个文件都没读到，上面那条照样绿。
     assert.ok(FILES.length >= 5, `只扫到 ${FILES.length} 个文件，路径大概错了`);
     const total = FILES.reduce((n, f) => n + referencesIn(readFileSync(f, 'utf-8')).length, 0);
@@ -72,7 +72,7 @@ describe('主题的 CSS 变量', () => {
     assert.ok(definedIn(css).size >= 20, 'site.css 里的定义数不对');
   });
 
-  test('**明暗两套都要有高亮色** —— 只定义一套，就是让一半的人看不见命中', () => {
+  test('**明暗两套主题都定义了高亮背景色和文本色**', () => {
     const at = css.indexOf('prefers-color-scheme: dark');
     assert.ok(at > 0, '深色模式那一段不见了');
     const light = definedIn(css.slice(0, at));
@@ -84,7 +84,7 @@ describe('主题的 CSS 变量', () => {
     }
   });
 
-  test('**高亮的底色和字色必须是一对** —— 底色借了别处、字色写死，就是白底白字', () => {
+  test('**高亮背景色与文本色须成对配置** —— 避免反差失效导致白底白字', () => {
     // 用 assert.ok 而不是 assert.match：后者失败时会把整个文件打进报告里，
     // 于是真正的那一行被埋在几百行输出中间。
     assert.ok(
@@ -103,7 +103,7 @@ describe('主题的 CSS 变量', () => {
     );
   });
 
-  test('**搜索页的样式只有一份** —— 两份同名选择器会交织，而模板里那份会漂', () => {
+  test('**搜索页样式保持单一定义** —— 避免同名选择器规则冲突与漂移', () => {
     // 曾经 site.css 与 search.html 的内联 <style> 各有一份 .hit / #q / .idx，
     // 内联那份在文档顺序上靠后。页面上生效的既不是任何一份，而是两份交织的
     // 结果：#q 的圆角来自内联、字号来自 site.css。命中高亮整段隐形那次，

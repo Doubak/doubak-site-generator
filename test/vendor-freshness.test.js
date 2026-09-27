@@ -64,14 +64,14 @@ const mod = EXT ? await import(join(EXT, 'tools/sync-vendor.mjs')) : null;
 const source = mod?.SOURCES.find((s) => s.repo === REPO) ?? null;
 
 describe('扩展里那份拷贝的新鲜度', () => {
-  test('CI 里必须真的查过 —— 跳过等于没测', () => {
+  test('CI 环境必须严格执行检查，禁止跳过', () => {
     if (!process.env.CI) return; // 本地缺仓库是正常的
     assert.ok(EXT, 'CI 里必须并排检出 doubak-extension，否则下面那条会静默跳过');
   });
 
   const skip = EXT ? false : '找不到 doubak-extension —— 单独 clone 这一个仓库时这是正常的';
 
-  test('`src/vendor/` 里的每个文件都还是这里的同一份', { skip }, () => {
+  test('`src/vendor/` 中的文件内容保持与上游一致', { skip }, () => {
     assert.ok(source, `扩展的 SOURCES 里没有 ${REPO} —— 名单被改坏了，或者这个仓库改名了`);
 
     const want = mod.renderOne(source, ROOT); // 抛出来的话说明上游少文件，信息在脚本里
