@@ -66,7 +66,7 @@ describe('豆瓣上不公开的日记', () => {
     assert.equal(b.platform.length, 0);
   });
 
-  test('以最新修订版本为准 —— 兼容先公开后锁定的长文记录', () => {
+  test('以最新修订版本为准 —— 一篇日记可能先公开、后来被锁定', () => {
     const r = rec('note', '1', { visibility: 'public' });
     r.revisions.push({ fields: { title: '后来被锁了', visibility: 'private', restricted_by: 'platform' } });
     assert.deepEqual(notesOf([r]).platform.map((x) => x.id), ['1']);
