@@ -30,6 +30,9 @@ export const CANONICAL_FILES = /** @type {const} */ ({
   longform: 'longform.ndjson',
   broadcasts: 'broadcasts.ndjson',
   doulists: 'doulists.ndjson',
+  albums: 'albums.ndjson',
+  group_topics: 'group_topics.ndjson',
+  group_joins: 'group_joins.ndjson',
 });
 
 /**

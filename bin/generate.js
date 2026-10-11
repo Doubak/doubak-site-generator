@@ -32,7 +32,8 @@ const r = generate({
 });
 
 console.log(
-  `页面 ${r.pages}（标记 ${r.marks} · 长文 ${r.longform} · 广播 ${r.broadcasts} 条归入 ${r.broadcastMonths} 个月）`
+  `页面 ${r.pages}（标记 ${r.marks} · 长文 ${r.longform} · 广播 ${r.broadcasts} 条归入 ${r.broadcastMonths} 个月`
+  + `${r.albums ? ` · 相册 ${r.albums}` : ''}${r.groupTopics || r.groupJoins ? ` · 小组 ${r.groupTopics} 话题/${r.groupJoins} 加入` : ''}）`
   + ` · 图片 ${r.images.written} 张 · ${Date.now() - t0} ms → ${outDir}/`,
 );
 

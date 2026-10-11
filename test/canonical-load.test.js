@@ -32,11 +32,11 @@ describe('canonical 的文件名单只有一份', () => {
     }
   });
 
-  test('五类记录都在名单里', () => {
+  test('八类记录都在名单里', () => {
     // 少一类不会报错，只会让站点静静地少几十页。
     assert.deepEqual(
       Object.keys(CANONICAL_FILES).sort(),
-      ['broadcasts', 'doulists', 'longform', 'marks', 'subjects'],
+      ['albums', 'broadcasts', 'doulists', 'group_joins', 'group_topics', 'longform', 'marks', 'subjects'],
     );
   });
 

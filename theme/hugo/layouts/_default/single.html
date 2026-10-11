@@ -48,6 +48,35 @@
   <blockquote>广播发布后不可编辑，所以每条都是那一刻的原话。</blockquote>
   {{ .Content }}
 
+{{ else if eq .Params.douban_kind "album" }}
+  {{/* ── 相册 ─────────────────────────────────────────────────── */}}
+  <h1>{{ .Title }}</h1>
+  <div class="meta-line">
+    <span class="chip chip-plain">相册</span>
+    {{ with .Params.douban_created_at_raw }}<span> · {{ . }}</span>{{ end }}
+    {{ with .Params.douban_photo_count }}<span> · {{ . }} 张照片</span>{{ end }}
+  </div>
+  {{ .Content }}
+
+{{ else if eq .Params.douban_kind "group_topic" }}
+  {{/* ── 小组话题 ─────────────────────────────────────────────── */}}
+  <h1>{{ .Title }}</h1>
+  <div class="meta-line">
+    <span class="chip chip-plain">小组话题</span>
+    {{ with .Params.douban_group_name }}<span> · {{ . }}</span>{{ end }}
+    {{ with .Params.douban_published_at_raw }}<span> · {{ . }}</span>{{ end }}
+  </div>
+  {{ .Content }}
+
+{{ else if eq .Params.douban_kind "group_joins" }}
+  {{/* ── 加入的小组 ───────────────────────────────────────────── */}}
+  <h1>{{ .Title }}</h1>
+  <div class="meta-line">
+    <span class="chip chip-plain">小组</span>
+    {{ with .Params.douban_item_count }}<span> · {{ . }} 个小组</span>{{ end }}
+  </div>
+  {{ .Content }}
+
 {{ else }}
   {{/* ── 日记 / 评论 ──────────────────────────────────────────── */}}
   <h1>{{ .Title }}</h1>

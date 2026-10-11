@@ -155,6 +155,21 @@ describe('私密广播与私密豆列', () => {
     assert.deepEqual(p2.doulists.map((x) => x.title), ['SELECTS']);
     assert.deepEqual(p2.unknownPrivacy, []);
   });
+
+  test('私密相册默认不发布，--include-private 包含私密相册', () => {
+    const c = {
+      albums: [
+        { upstream_id: 'a1', revisions: [{ fields: { title: '私密相册', privacy: 'author' } }] },
+        { upstream_id: 'a2', revisions: [{ fields: { title: '公开相册', privacy: 'public' } }] },
+      ],
+    };
+    const priv = privateContent(c);
+    assert.deepEqual(priv.albums.map((x) => x.id), ['a1']);
+    const def = withoutPrivate(c);
+    assert.deepEqual(def.albums.map((x) => x.upstream_id), ['a2']);
+    const all = withoutPrivate(c, { includePrivate: true });
+    assert.deepEqual(all.albums.map((x) => x.upstream_id), ['a1', 'a2']);
+  });
 });
 
 test('**发布的私密广播需在页面提供明确标识**', async () => {

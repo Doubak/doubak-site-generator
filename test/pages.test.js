@@ -19,7 +19,7 @@ const THEME_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'theme', '
 
 import { project, groupMarks } from '../src/projection.js';
 import {
-  markPage, longformPage, doulistPage, markPath, longformPath, verb,
+  markPage, longformPage, doulistPage, albumPage, groupTopicPage, groupJoinsPage, markPath, longformPath, verb,
   broadcastMonthPage, broadcastMonthPath, monthOf, plainText, UNDATED,
   markFilterPath, markFilterPage, mdTitleAttr, coverStripItem, SOURCE_LINK_TITLE,
 } from '../src/markdown.js';
@@ -1540,7 +1540,7 @@ describe('Hugo 骨架', () => {
     assert.ok(m, 'hugo.toml 里该有 sectionOrder');
     const order = m[1].split(',').map((x) => x.trim().replace(/'/g, ''));
     assert.deepEqual(order,
-      ['broadcast', 'book', 'movie', 'game', 'music', 'drama', 'note', 'review', 'doulist']);
+      ['broadcast', 'book', 'movie', 'game', 'music', 'drama', 'note', 'review', 'doulist', 'album', 'group']);
 
     const p = readFileSync(join(THEME, 'layouts/partials/sections.html'), 'utf-8');
     assert.match(p, /if not \(in \$want \.Section\)/, '名单之外的小节要接在后面，不能丢');
@@ -1666,6 +1666,14 @@ describe('Hugo 骨架', () => {
       ...doulistPage({ id: '1', url: null, title: 't', description: null, visibility: 'public',
         ownership: 'created', revisionCount: 1, lastSeenAt: 'x', items: [] })
         .matchAll(/^(douban_\w+):/gm),
+      ...albumPage({ id: '1', url: null, title: 't', desc: null, createdAt: null, createdAtRaw: '2020-01-01',
+        updatedAt: null, updatedAtRaw: null, claimedCount: null, coverPhotoId: null, privacy: 'public',
+        photos: [], revisionCount: 1, lastSeenAt: 'x' }).matchAll(/^(douban_\w+):/gm),
+      ...groupTopicPage({ id: '1', url: null, title: 't', body: 'b', publishedAt: null, publishedAtRaw: '2020-01-01',
+        groupId: 'g1', groupName: 'gn', groupUrl: null, images: [], revisionCount: 1, lastSeenAt: 'x' })
+        .matchAll(/^(douban_\w+):/gm),
+      ...groupJoinsPage([{ id: '1', url: null, name: 'g', role: 'member', memberCount: 10, iconUrl: null,
+        revisionCount: 1, lastSeenAt: 'x' }]).matchAll(/^(douban_\w+):/gm),
     ].map((m) => m[1]));
 
     const missing = [...used].filter((k) => !emitted.has(k));
@@ -1960,6 +1968,24 @@ describe('动作句里的链接指到哪儿', () => {
     assert.deepEqual(b.actionParts[1], { text: '游戏购买小账本', href: 'doulist/45473911.md' });
   });
 
+  test('相册与小组：本地有就接回本地那一页', () => {
+    const alb = { canonical_version: 'c', identity_layer: 'upstream_id', upstream_id: '1687595221',
+      account: {}, url: null, revisions: [rev({ title: '我的相册' }, 'x')] };
+    const topic = { canonical_version: 'c', identity_layer: 'upstream_id', upstream_id: '615303804',
+      account: {}, url: null, revisions: [rev({ title: '讨论话题' }, 'x')] };
+    const bAlb = withParts(
+      [{ text: '更新了相册 ' }, { text: '我的相册', url: 'https://www.douban.com/photos/album/1687595221/' }],
+      { albums: [alb] },
+    );
+    assert.deepEqual(bAlb.actionParts[1], { text: '我的相册', href: 'album/1687595221.md' });
+
+    const bTopic = withParts(
+      [{ text: '在小组发表了 ' }, { text: '讨论话题', url: 'https://www.douban.com/group/topic/615303804/' }],
+      { group_topics: [topic] },
+    );
+    assert.deepEqual(bTopic.actionParts[1], { text: '讨论话题', href: 'group/615303804.md' });
+  });
+
   test('**文本两端空白字符严禁纳入超链接范围** —— 避免下划线样式溢出', () => {
     const b = withParts([{ text: '收藏到 ' }, { text: ' 名字 ', url: 'https://douc.cc/x' }]);
     const md = broadcastMonthPage('2021-11', [b]);
@@ -2105,5 +2131,163 @@ describe('日记可见性状态写入页面', () => {
     const t = longformPage(note({ visibility: 'private', restrictedBy: 'author' }));
     assert.match(t, /^douban_visibility: private$/m);
     assert.match(t, /^douban_restricted_by: author$/m);
+  });
+});
+
+describe('相册与小组页面生成', () => {
+  test('相册页包含 front matter、描述与照片链接', () => {
+    const page = albumPage({
+      id: '12345',
+      url: 'https://www.douban.com/photos/album/12345/',
+      title: '旅行记录',
+      desc: '在京都拍的照片',
+      createdAtRaw: '2023-04-01 10:00:00',
+      privacy: 'public',
+      revisionCount: 1,
+      lastSeenAt: '2026-10-11T12:00:00Z',
+      photos: [
+        { id: 'p1', imageUrl: 'https://img.doubanio.com/large/p1.jpg', caption: '金阁寺' },
+      ],
+    }, {
+      images: { 'https://img.doubanio.com/large/p1.jpg': 'static/p1.jpg' },
+    });
+    assert.match(page, /^title: "旅行记录"$/m);
+    assert.match(page, /^douban_kind: album$/m);
+    assert.match(page, /^douban_photo_count: 1$/m);
+    assert.match(page, /在京都拍的照片/);
+    assert.match(page, /static\/p1\.jpg/);
+    assert.match(page, /\*金阁寺\*/);
+  });
+
+  test('私密相册标记 douban_private 并显示锁标', () => {
+    const page = albumPage({
+      id: '999',
+      title: '私密相册',
+      privacy: 'author',
+      photos: [],
+      revisionCount: 1,
+      lastSeenAt: '2026-10-11T12:00:00Z',
+    });
+    assert.match(page, /^douban_private: true$/m);
+    assert.match(page, /🔒 \*\*这是一个私密相册\*\*/);
+  });
+
+  test('小组话题页包含小组信息与正文', () => {
+    const page = groupTopicPage({
+      id: 't1',
+      title: '有人看最新一集了吗',
+      body: '剧情好精彩！',
+      groupId: 'g1',
+      groupName: '美剧迷',
+      publishedAtRaw: '2024-01-01 12:00:00',
+      revisionCount: 1,
+      lastSeenAt: '2026-10-11T12:00:00Z',
+    });
+    assert.match(page, /^douban_kind: group_topic$/m);
+    assert.match(page, /^douban_group_name: "美剧迷"$/m);
+    assert.match(page, /剧情好精彩！/);
+  });
+
+  test('加入的小组总览页分类展示管理与加入的小组', () => {
+    const page = groupJoinsPage([
+      { id: '1', name: '我创建的小组', role: 'manager', memberCount: 100, url: 'https://douban.com/group/1' },
+      { id: '2', name: '普通的交流组', role: 'member', memberCount: 50, url: 'https://douban.com/group/2' },
+    ]);
+    assert.match(page, /^douban_kind: group_joins$/m);
+    assert.match(page, /^douban_item_count: 2$/m);
+    assert.match(page, /## 管理的小组 \(1\)/);
+    assert.match(page, /## 加入的小组 \(1\)/);
+    assert.match(page, /我创建的小组/);
+    assert.match(page, /普通的交流组/);
+  });
+});
+
+describe('0 个条目的类别不显示在首页与导航', () => {
+  test('0 条目的类别在首页不生成小节块，也不生成空目录 _index.md', () => {
+    const out = mkdtempSync(join(tmpdir(), 'doubak-zero-item-'));
+    // 只有一条电影标记，0 本书，0 张相册，0 个小组话题，0 篇长文，0 篇日记，0 条广播
+    generate({
+      canonical: {
+        marks: [mark({ medium: 'movie' })],
+        subjects: [subject({ medium: 'movie' })],
+        longform: [],
+        broadcasts: [],
+        doulists: [],
+        albums: [],
+        group_topics: [],
+        group_joins: [],
+      },
+      outDir: out,
+    });
+
+    const home = readFileSync(join(out, 'content/_index.md'), 'utf-8');
+    assert.match(home, /## 影视/);
+    assert.doesNotMatch(home, /## 书/);
+    assert.doesNotMatch(home, /## 广播/);
+    assert.doesNotMatch(home, /## 日记/);
+    assert.doesNotMatch(home, /## 评论/);
+    assert.doesNotMatch(home, /## 豆列/);
+    assert.doesNotMatch(home, /## 相册/);
+    assert.doesNotMatch(home, /## 小组/);
+
+    // 0 条目的类别不该生成各自的 _index.md
+    assert.ok(!existsSync(join(out, 'content/book/_index.md')));
+    assert.ok(!existsSync(join(out, 'content/broadcast/_index.md')));
+    assert.ok(!existsSync(join(out, 'content/album/_index.md')));
+    assert.ok(!existsSync(join(out, 'content/group/_index.md')));
+    assert.ok(!existsSync(join(out, 'content/doulist/_index.md')));
+  });
+
+  test('有相册和小组时，首页正文有对应小节，且有对应文件', () => {
+    const out = mkdtempSync(join(tmpdir(), 'doubak-with-albums-'));
+    generate({
+      canonical: {
+        marks: [mark({ medium: 'movie' })],
+        subjects: [subject({ medium: 'movie' })],
+        longform: [],
+        broadcasts: [],
+        doulists: [],
+        albums: [{
+          upstream_id: 'a1',
+          url: 'https://www.douban.com/photos/album/a1/',
+          revisions: [{
+            first_observed_at: '2026-10-11T10:00:00Z',
+            last_observed_at: '2026-10-11T10:00:00Z',
+            fields: { title: '测试相册', privacy: 'public', photos: [] },
+          }],
+        }],
+        group_topics: [{
+          upstream_id: 't1',
+          url: 'https://www.douban.com/group/topic/t1/',
+          revisions: [{
+            first_observed_at: '2026-10-11T10:00:00Z',
+            last_observed_at: '2026-10-11T10:00:00Z',
+            fields: { title: '测试话题', body: '正文内容', group_id: 'g1', group_name: '测试组' },
+          }],
+        }],
+        group_joins: [{
+          upstream_id: 'g1',
+          url: 'https://www.douban.com/group/g1/',
+          revisions: [{
+            first_observed_at: '2026-10-11T10:00:00Z',
+            last_observed_at: '2026-10-11T10:00:00Z',
+            fields: { name: '测试组', role: 'member', member_count: 10 },
+          }],
+        }],
+      },
+      outDir: out,
+    });
+
+    const home = readFileSync(join(out, 'content/_index.md'), 'utf-8');
+    assert.match(home, /## 相册 1/);
+    assert.match(home, /测试相册/);
+    assert.match(home, /## 小组 1 篇话题/);
+    assert.match(home, /测试话题/);
+
+    assert.ok(existsSync(join(out, 'content/album/_index.md')));
+    assert.ok(existsSync(join(out, 'content/album/a1.md')));
+    assert.ok(existsSync(join(out, 'content/group/_index.md')));
+    assert.ok(existsSync(join(out, 'content/group/t1.md')));
+    assert.ok(existsSync(join(out, 'content/group/joins.md')));
   });
 });
