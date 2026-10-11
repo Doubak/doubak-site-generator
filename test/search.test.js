@@ -45,6 +45,7 @@ describe('索引里该有什么', () => {
       }],
       groupTopics: [{
         id: 't1', title: '求推荐好看的悬疑片', body: '类似看不见的客人那种', publishedAtRaw: '2022-05-01',
+        groupName: '悬疑电影讨论组', images: [{ caption: '海报配图' }],
       }],
     }));
     assert.deepEqual(rows.map((r) => r.t).sort(), ['a', 'g']);
@@ -55,6 +56,9 @@ describe('索引里该有什么', () => {
     const g = rows.find((r) => r.t === 'g');
     assert.equal(g.u, 'group/t1');
     assert.match(g.c, /类似看不见的客人/);
+    assert.match(g.c, /海报配图/);
+    assert.equal(g.w, '悬疑电影讨论组');
+    assert.equal(g.k, '悬疑电影讨论组');
   });
 
   test('**上游被删、没有标题的作品也要收**', () => {
