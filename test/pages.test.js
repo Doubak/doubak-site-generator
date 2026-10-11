@@ -2279,8 +2279,10 @@ describe('0 个条目的类别不显示在首页与导航', () => {
     });
 
     const home = readFileSync(join(out, 'content/_index.md'), 'utf-8');
-    assert.doesNotMatch(home, /## 相册/);
-    assert.doesNotMatch(home, /## 小组/);
+    assert.match(home, /## 相册 1/);
+    assert.match(home, /测试相册/);
+    assert.match(home, /## 小组 1/);
+    assert.match(home, /测试话题/);
 
     assert.ok(existsSync(join(out, 'content/album/_index.md')));
     assert.ok(existsSync(join(out, 'content/album/a1.md')));

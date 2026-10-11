@@ -288,6 +288,30 @@ h3 { font-size: 1rem; margin: var(--s5) 0 var(--s2); font-weight: 600; }
 }
 
 /*
+ * 首页相册预览封面：仿豆瓣相册长方形卡片风格，带浅色边框与圆角。
+ */
+.section-home p > a[href*="album/"] > img,
+.section-home p > a[href*="/album"] > img {
+  float: left;
+  width: 7.5rem; max-width: 7.5rem; height: auto;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+  padding: 3px;
+  border: 1px solid var(--line); border-radius: var(--r1);
+  background: var(--surface);
+  box-shadow: 0 1px 3px #0000000d;
+  margin: .2em var(--s4) var(--s3) 0;
+  transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+.section-home p > a[href*="album/"]:hover > img,
+.section-home p > a[href*="/album"]:hover > img {
+  transform: translateY(-2px);
+  border-color: var(--brand);
+  box-shadow: 0 4px 14px #0000001a;
+}
+
+
+/*
  * 预览里那条广播自己带的附图。
  *
  * 今天首页上那两条恰好都没有附图，所以这条一次都不生效——但那是**数据碰巧**：
