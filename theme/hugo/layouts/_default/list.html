@@ -108,8 +108,11 @@
           {{ with .Params.douban_created_at_raw }}{{ . }}{{ end }}
           {{ with .Params.douban_group_name }} · {{ . }}{{ end }}
           {{ with .Params.douban_photo_count }} · {{ . }} 张照片{{ end }}
-          {{ with .Params.douban_location }} · {{ . }}{{ end }}
-          {{ with .Params.douban_item_count }}{{ . }} {{ if eq .Params.douban_kind "group_joins" }}个小组{{ else }}条{{ end }}{{ end }}
+          {{ if eq .Params.douban_kind "group_joins" }}
+            {{ with .Params.douban_item_count }}{{ . }} 个小组{{ end }}
+          {{ else }}
+            {{ with .Params.douban_item_count }}{{ . }} 条{{ end }}
+          {{ end }}
           {{ partial "stars.html" .Params.douban_rating }}
         </div>
       </li>
