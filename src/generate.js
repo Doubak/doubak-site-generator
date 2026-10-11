@@ -131,6 +131,26 @@ export function generate({
     // 广播附图。这些是**用户自己上传的**，比封面更不可替代——封面豆瓣还有一份，
     // 这些没有第二处。
     for (const b of p.broadcasts) for (const u of b.images) wanted.add(u);
+    // 相册照片。同样是用户自己上传的原创内容。
+    for (const a of p.albums ?? []) {
+      for (const ph of a.photos) {
+        if (ph.imageUrl) wanted.add(ph.imageUrl);
+        if (ph.thumbnailUrl) wanted.add(ph.thumbnailUrl);
+      }
+    }
+    // 小组话题插图与加入的小组图标。
+    for (const t of p.groupTopics ?? []) {
+      for (const m of (t.body ?? '').matchAll(/https:\/\/[a-z0-9.]*doubanio\.com\/[^\s"'<>)）]+/g)) {
+        wanted.add(m[0]);
+      }
+      for (const img of t.images) {
+        if (img.src) wanted.add(img.src);
+        if (img.url) wanted.add(img.url);
+      }
+    }
+    for (const j of p.groupJoins ?? []) {
+      if (j.iconUrl) wanted.add(j.iconUrl);
+    }
     const res = exportImages({
       index: indexImages(bundlesDir),
       wanted,

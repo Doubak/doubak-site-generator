@@ -37,6 +37,30 @@ describe('索引里该有什么', () => {
     assert.deepEqual(rows.map((r) => r.t).sort(), ['b', 'l', 'm']);
   });
 
+  test('相册与小组话题也进索引', () => {
+    const { rows } = buildSearchIndex(proj({
+      albums: [{
+        id: 'a1', title: '东京游记', desc: '去浅草寺拍的照片', createdAtRaw: '2023-04-01',
+        photos: [{ caption: '雷门大灯笼' }],
+      }],
+      groupTopics: [{
+        id: 't1', title: '求推荐好看的悬疑片', body: '类似看不见的客人那种', publishedAtRaw: '2022-05-01',
+        groupName: '悬疑电影讨论组', images: [{ caption: '海报配图' }],
+      }],
+    }));
+    assert.deepEqual(rows.map((r) => r.t).sort(), ['a', 'g']);
+    const a = rows.find((r) => r.t === 'a');
+    assert.equal(a.u, 'album/a1');
+    assert.match(a.c, /去浅草寺/);
+    assert.match(a.c, /雷门大灯笼/);
+    const g = rows.find((r) => r.t === 'g');
+    assert.equal(g.u, 'group/t1');
+    assert.match(g.c, /类似看不见的客人/);
+    assert.match(g.c, /海报配图/);
+    assert.equal(g.w, '悬疑电影讨论组');
+    assert.equal(g.k, '悬疑电影讨论组');
+  });
+
   test('**上游被删、没有标题的作品也要收**', () => {
     // 标题是 null，但用户自己写的短评还在——那恰恰是最该搜得到的东西。
     const { rows } = buildSearchIndex(proj({ marks: [pmark({ title: null, comment: '当年觉得很好' })] }));

@@ -90,6 +90,64 @@
   {{ end }}
   {{ partial "pager.html" $paginator }}
 
+{{ else if eq .Section "album" }}
+  {{/* 相册列表：仿豆瓣相册网格，带边框的长方形预览封面图 */}}
+  {{ $paginator := .Paginate .Pages.ByDate.Reverse }}
+  <ul class="album-grid">
+    {{ range $paginator.Pages }}
+      <li class="album-card">
+        <a class="album-cover-link" href="{{ .RelPermalink }}">
+          <div class="album-shot">
+            {{ with .Params.douban_cover }}
+              <img src="{{ . }}" alt="{{ $.Title }}" loading="lazy">
+            {{ else }}
+              <div class="nocover">无封面</div>
+            {{ end }}
+          </div>
+        </a>
+        <div class="album-body">
+          <div class="album-title">
+            <a href="{{ .RelPermalink }}">{{ .Title }}</a>
+            {{ if .Params.douban_private }}<span class="lock" title="私密相册：在豆瓣上只有你自己看得见">🔒</span>{{ end }}
+          </div>
+          <div class="meta-line">
+            {{ with .Params.douban_photo_count }}<span>{{ . }} 张照片</span>{{ end }}
+            {{ with .Params.douban_created_at_raw }}<span> · {{ . }}</span>{{ end }}
+          </div>
+        </div>
+      </li>
+    {{ end }}
+  </ul>
+  {{ partial "pager.html" $paginator }}
+
+{{ else if eq .Section "group" }}
+  {{/* 小组总览页：加入的小组列在顶部，下部展示我发起的讨论列表 */}}
+  {{ $joinsPage := where .RegularPages "Params.douban_kind" "group_joins" }}
+  {{ $topics := where .RegularPages "Params.douban_kind" "group_topic" }}
+
+  {{ with index $joinsPage 0 }}
+    <section class="group-overview-joins">
+      {{ .Content }}
+    </section>
+  {{ end }}
+
+  <section class="group-overview-topics">
+    <h2>发起的讨论 <span class="chip chip-plain">{{ len $topics }}</span></h2>
+    {{ $paginator := .Paginate $topics.ByDate.Reverse }}
+    <ul class="plainlist">
+      {{ range $paginator.Pages }}
+        <li class="entry">
+          <a href="{{ .RelPermalink }}"><b>{{ .Title }}</b></a>
+          <div class="meta-line">
+            {{ with .Params.douban_published_at_raw }}{{ . }}{{ end }}
+            {{ with .Params.douban_group_name }} · {{ . }}{{ end }}
+          </div>
+        </li>
+      {{ end }}
+    </ul>
+    {{ partial "pager.html" $paginator }}
+  </section>
+
 {{ else }}
   {{/* 日记与评论：数量少，一条一行足够。 */}}
   {{ $paginator := .Paginate .Pages.ByDate.Reverse }}
@@ -102,11 +160,17 @@
         {{/* 私密豆列在**目录页上也要看得见**。只在点进去才说，等于目录页把一份
              私密的和一份公开的画成一模一样——而这份站点是可以发布出去的，目录页
              又恰恰是别人扫一眼的地方。`douban_private` 在 unknown 时也是 true。 */}}
-        {{ if .Params.douban_private }}<span class="lock" title="私密豆列：在豆瓣上只有你自己看得见">🔒</span>{{ end }}
+        {{ if .Params.douban_private }}<span class="lock" title="私密：在豆瓣上只有你自己看得见">🔒</span>{{ end }}
         <div class="meta-line">
           {{ with .Params.douban_published_at_raw }}{{ . }}{{ end }}
-          {{ with .Params.douban_location }} · {{ . }}{{ end }}
-          {{ with .Params.douban_item_count }}{{ . }} 条{{ end }}
+          {{ with .Params.douban_created_at_raw }}{{ . }}{{ end }}
+          {{ with .Params.douban_group_name }} · {{ . }}{{ end }}
+          {{ with .Params.douban_photo_count }} · {{ . }} 张照片{{ end }}
+          {{ if eq .Params.douban_kind "group_joins" }}
+            {{ with .Params.douban_item_count }}{{ . }} 个小组{{ end }}
+          {{ else }}
+            {{ with .Params.douban_item_count }}{{ . }} 条{{ end }}
+          {{ end }}
           {{ partial "stars.html" .Params.douban_rating }}
         </div>
       </li>

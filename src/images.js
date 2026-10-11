@@ -37,21 +37,13 @@ const SEP = '\r\n\r\n';
  */
 export function indexImages(root) {
   const bundles = [];
-  for (const name of readdirSync(root)) {
-    const dir = join(root, name);
+
+  function tryReadBundle(dir) {
     let idxNames;
     try {
       idxNames = readdirSync(dir).filter((f) => f.startsWith('index-') && f.endsWith('.ndjson'));
-    } catch { continue; }
+    } catch { return; }
     // **一个目录里有几份索引，就读几份。**
-    //
-    // 原来这里是 `.find(...)`，只取第一份。真实存在的形状：`~/downloads/old`
-    // 是个下载文件夹，10 份档案的索引与段文件平铺在一起——那样只会读到 1 份，
-    // 另外 9 份的图**一张都取不到**，而页面上只会表现为「有几张封面缺了」。
-    //
-    // 解析器那边刚修的是同一个 bug（`bundle-source.js` 的 `openAll`）。两边
-    // 必须一起修：解析器读全了、这边没读全，canonical 会引用一批本地根本没
-    // 导出来的图，而那正是「离线可看」失守的样子。
     for (const idxName of idxNames) {
       const rows = [];
       for (const line of readFileSync(join(dir, idxName), 'utf-8').split('\n')) {
@@ -60,6 +52,14 @@ export function indexImages(root) {
       bundles.push({ host: dir, rows });
     }
   }
+
+  // 既支持 root 本身就是一份 bundle 目录，也支持 root 包含多个子 bundle 目录
+  tryReadBundle(root);
+  try {
+    for (const name of readdirSync(root)) {
+      tryReadBundle(join(root, name));
+    }
+  } catch {}
   // 判定在 image-index.js 里——那是个纯函数，扩展也在用同一份。
   // 这里只做它做不了的事：把 index 从盘上读出来。
   const { byUrl, bySubject } = buildImageIndex(bundles);
