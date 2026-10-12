@@ -21,10 +21,36 @@ import { readCanonical } from '../src/canonical.js';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const serve = args.includes('--serve');
-const noTheme = args.includes('--no-theme');
-const sourceRepo = args.find((a) => a.startsWith('--source-repo='))?.slice('--source-repo='.length) || null;
-const siteTitle = args.find((a) => a.startsWith('--site-title='))?.slice('--site-title='.length) || null;
-const [canonDir, bundlesDir, outDir = 'site-out'] = args.filter((a) => !a.startsWith('--'));
+const repoEq = args.find((a) => a.startsWith('--source-repo='));
+let sourceRepo = repoEq ? repoEq.slice('--source-repo='.length) : null;
+if (!sourceRepo) {
+  const idx = args.indexOf('--source-repo');
+  if (idx >= 0 && args[idx + 1] && !args[idx + 1].startsWith('--')) {
+    sourceRepo = args[idx + 1];
+  }
+}
+
+const titleEq = args.find((a) => a.startsWith('--site-title='));
+let siteTitle = titleEq ? titleEq.slice('--site-title='.length) : null;
+if (!siteTitle) {
+  const idx = args.indexOf('--site-title');
+  if (idx >= 0 && args[idx + 1] && !args[idx + 1].startsWith('--')) {
+    siteTitle = args[idx + 1];
+  }
+}
+
+const nonFlagArgs = [];
+for (let i = 0; i < args.length; i++) {
+  const a = args[i];
+  if (a === '--site-title' || a === '--source-repo') {
+    i++;
+    continue;
+  }
+  if (!a.startsWith('--')) {
+    nonFlagArgs.push(a);
+  }
+}
+const [canonDir, bundlesDir, outDir = 'site-out'] = nonFlagArgs;
 
 if (!canonDir) {
   console.error('用法: node bin/site.js <canonical 目录> <bundle 目录> [产出目录] [--serve] [--no-theme] [--source-repo=<url>] [--site-title=<标题>]');

@@ -12,6 +12,7 @@ npm run site  -- <canonical 目录> <bundle 目录> [产出目录]   # 进一步
 npm run serve  -- <canonical 目录> <bundle 目录> [产出目录]  # 启动本地预览服务器
 npm run deploy -- <canonical 目录> <bundle 目录> <仓库目录>  # 部署至 GitHub Pages 仓库
 #                 [--include-private]                       # 导出私密数据（默认排除）
+#                 [--site-title=<标题>]                     # 自定义站点标题（默认 <昵称>的豆瓣存档）
 npm test                                                    # node --test，零依赖
 ```
 
@@ -114,6 +115,12 @@ npm 社区中的 `hugo-bin` 等封装包本质上也是下载官方二进制，�
 ### 极简骨架便于自由替换
 
 内置骨架保持精简，旨在减少依赖并便于替换。若需切换为现成的 Hugo 主题：只需移除 `layouts/` 目录并按对应主题配置，`content/` 与 `static/` 数据目录完全无需改动。
+
+### 站点标题与作者身份呈现
+
+生成的站点标题（用于首页大标题、导航栏与各页面 `<title>`）默认具备明确的作者身份归属，不再是写死的泛指「我的豆瓣存档」：
+- **自动级联回退**：自动从归档记录（`account.nickname` 或 `displayName`）中提取用户昵称生成 `<昵称>的豆瓣存档`（如 `MewX的豆瓣存档`）。若无昵称，依次回退至 `<username>的豆瓣存档`、`<user_id>的豆瓣存档`，最后兜底回退至 `我的豆瓣存档`。
+- **显式指定**：支持通过 `--site-title=<标题>`（或 `--site-title <标题>`）显式自定义全站标题。
 
 ## 浏览器扩展中的同构支持
 

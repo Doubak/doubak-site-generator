@@ -15,8 +15,27 @@ const args = process.argv.slice(2);
 // **默认带上那个最小 Hugo 骨架**，让产出目录直接能跑起来。
 // 不想要（比如要换成现成的主题）就 --no-theme。
 const withTheme = !args.includes('--no-theme');
-const siteTitle = args.find((a) => a.startsWith('--site-title='))?.slice('--site-title='.length) || null;
-const [canonDir, bundlesDir, outDir = 'site-out'] = args.filter((a) => !a.startsWith('--'));
+const titleEq = args.find((a) => a.startsWith('--site-title='));
+let siteTitle = titleEq ? titleEq.slice('--site-title='.length) : null;
+if (!siteTitle) {
+  const idx = args.indexOf('--site-title');
+  if (idx >= 0 && args[idx + 1] && !args[idx + 1].startsWith('--')) {
+    siteTitle = args[idx + 1];
+  }
+}
+
+const nonFlagArgs = [];
+for (let i = 0; i < args.length; i++) {
+  const a = args[i];
+  if (a === '--site-title') {
+    i++;
+    continue;
+  }
+  if (!a.startsWith('--')) {
+    nonFlagArgs.push(a);
+  }
+}
+const [canonDir, bundlesDir, outDir = 'site-out'] = nonFlagArgs;
 if (!canonDir) {
   console.error('用法: node bin/generate.js <canonical 目录> <bundle 目录> [产出目录] [--no-theme] [--site-title=<标题>]');
   process.exit(2);

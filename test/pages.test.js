@@ -2342,15 +2342,18 @@ describe('0 个条目的类别不显示在首页与导航', () => {
       // 1. 显式指定最高优先级
       assert.equal(resolveSiteTitle({}, '自定义站名'), '自定义站名');
 
-      // 2. 存在 nickname / displayName
+      // 2. 存在 nickname / displayName（嵌套在记录内或直接在 canonical.account）
       assert.equal(resolveSiteTitle({ marks: [{ account: { nickname: 'MewX' } }] }), 'MewX的豆瓣存档');
       assert.equal(resolveSiteTitle({ profile: { nickname: '叔叔' } }), '叔叔的豆瓣存档');
+      assert.equal(resolveSiteTitle({ account: { nickname: '直接账号' } }), '直接账号的豆瓣存档');
 
       // 3. 只有 username
       assert.equal(resolveSiteTitle({ marks: [{ account: { username: 'mewcatcher' } }] }), 'mewcatcher的豆瓣存档');
+      assert.equal(resolveSiteTitle({ account: { username: 'direct_user' } }), 'direct_user的豆瓣存档');
 
       // 4. 只有 user_id
       assert.equal(resolveSiteTitle({ marks: [{ account: { user_id: '82160871' } }] }), '82160871的豆瓣存档');
+      assert.equal(resolveSiteTitle({ account: { user_id: '123456' } }), '123456的豆瓣存档');
 
       // 5. 兜底
       assert.equal(resolveSiteTitle({}), '我的豆瓣存档');

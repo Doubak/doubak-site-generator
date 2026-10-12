@@ -120,7 +120,10 @@ export function resolveSiteTitle(canonical, explicitTitle = null) {
     return explicitTitle.trim();
   }
   const findInRecords = (field) => {
-    for (const key of ['profile', 'marks', 'longform', 'broadcasts', 'albums', 'group_topics', 'group_joins', 'doulists']) {
+    const directVal = canonical?.[field] ?? canonical?.account?.[field];
+    if (typeof directVal === 'string' && directVal.trim() && directVal !== 'unknown') return directVal.trim();
+
+    for (const key of ['account', 'profile', 'marks', 'longform', 'broadcasts', 'albums', 'groupTopics', 'group_topics', 'groupJoins', 'group_joins', 'doulists']) {
       const target = canonical?.[key];
       if (Array.isArray(target)) {
         for (const item of target) {
