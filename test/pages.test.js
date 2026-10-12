@@ -2159,6 +2159,52 @@ describe('相册与小组页面生成', () => {
     assert.match(page, /\*金阁寺\*/);
   });
 
+  test('相册多照片流渲染：跨页合并后的相册（36 张照片）在页面中完整有序输出', () => {
+    // 模拟 2 页各 18 张合并后的 36 张照片相册
+    const photos = Array.from({ length: 36 }, (_, i) => ({
+      id: `photo_${i + 1}`,
+      url: `https://www.douban.com/photos/photo/photo_${i + 1}/`,
+      imageUrl: `https://img.doubanio.com/large/p${i + 1}.jpg`,
+      thumbnailUrl: `https://img.doubanio.com/m/p${i + 1}.jpg`,
+      caption: `照片描述 ${i + 1}`,
+      seq: i,
+    }));
+
+    const page = albumPage({
+      id: 'multipage_album',
+      url: 'https://www.douban.com/photos/album/multipage_album/',
+      title: '多页相册测试',
+      desc: '包含 36 张照片',
+      createdAtRaw: '2023-01-01 10:00:00',
+      privacy: 'public',
+      revisionCount: 1,
+      lastSeenAt: '2026-10-11T12:00:00Z',
+      photos,
+    }, {
+      images: {
+        'https://img.doubanio.com/large/p1.jpg': 'static/p1.jpg',
+        'https://img.doubanio.com/large/p36.jpg': 'static/p36.jpg',
+      },
+    });
+
+    assert.match(page, /^title: "多页相册测试"$/m);
+    assert.match(page, /^douban_photo_count: 36$/m);
+    // 第一张已映射本地路径
+    assert.match(page, /static\/p1\.jpg/);
+    assert.match(page, /\*照片描述 1\*/);
+    // 第 36 张已映射本地路径
+    assert.match(page, /static\/p36\.jpg/);
+    assert.match(page, /\*照片描述 36\*/);
+    // 未映射本地路径的照片回退到远程原图 URL
+    assert.match(page, /https:\/\/img\.doubanio\.com\/large\/p18\.jpg/);
+    assert.match(page, /\*照片描述 18\*/);
+
+    // 验证全部 36 张照片在输出中均有呈现
+    for (let i = 1; i <= 36; i++) {
+      assert.ok(page.includes(`照片描述 ${i}`), `缺少照片描述 ${i}`);
+    }
+  });
+
   test('私密相册标记 douban_private 并显示锁标', () => {
     const page = albumPage({
       id: '999',
