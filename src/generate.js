@@ -101,10 +101,69 @@ function writeIncludePrivate(tomlPath) {
   ]);
 }
 
+/**
+ * 确定站点标题。
+ *
+ * 级联回退规则：
+ * 1. 显式指定的 siteTitle
+ * 2. profile / canonical records 中的 nickname / displayName（形如「<昵称>的豆瓣存档」）
+ * 3. username（形如「<username>的豆瓣存档」）
+ * 4. user_id（形如「<user_id>的豆瓣存档」）
+ * 5. 兜底「我的豆瓣存档」
+ *
+ * @param {object} canonical
+ * @param {string|null} [explicitTitle]
+ * @returns {string}
+ */
+export function resolveSiteTitle(canonical, explicitTitle = null) {
+  if (explicitTitle && typeof explicitTitle === 'string' && explicitTitle.trim()) {
+    return explicitTitle.trim();
+  }
+  const findInRecords = (field) => {
+    for (const key of ['profile', 'marks', 'longform', 'broadcasts', 'albums', 'group_topics', 'group_joins', 'doulists']) {
+      const target = canonical?.[key];
+      if (Array.isArray(target)) {
+        for (const item of target) {
+          const val = item?.[field] ?? item?.account?.[field];
+          if (typeof val === 'string' && val.trim() && val !== 'unknown') return val.trim();
+        }
+      } else if (target && typeof target === 'object') {
+        const val = target?.[field] ?? target?.account?.[field];
+        if (typeof val === 'string' && val.trim() && val !== 'unknown') return val.trim();
+      }
+    }
+    return null;
+  };
+
+  const nickname = findInRecords('nickname') ?? findInRecords('displayName');
+  if (nickname) return `${nickname}的豆瓣存档`;
+
+  const username = findInRecords('username');
+  if (username) return `${username}的豆瓣存档`;
+
+  const userId = findInRecords('user_id');
+  if (userId) return `${userId}的豆瓣存档`;
+
+  return '我的豆瓣存档';
+}
+
+/** @param {string} tomlPath @param {string} title */
+function writeSiteTitle(tomlPath, title) {
+  if (!title) return;
+  const text = readFileSync(tomlPath, 'utf-8');
+  const replaced = text.replace(/^title\s*=\s*['"][^'"]*['"]/m, `title = ${JSON.stringify(title)}`);
+  if (replaced !== text) {
+    writeFileSync(tomlPath, replaced, 'utf-8');
+  } else {
+    writeFileSync(tomlPath, `title = ${JSON.stringify(title)}\n` + text, 'utf-8');
+  }
+}
+
 export function generate({
   canonical, bundlesDir, outDir, clean = true, themeDir = null, sourceRepo = null,
-  includePrivate = false, dropNotes = [],
+  includePrivate = false, dropNotes = [], siteTitle = null,
 }) {
+  const resolvedTitle = resolveSiteTitle(canonical, siteTitle);
   // **筛选放在这儿，不放在 bin/deploy.js 里。** `npm run md` 与 `npm run site`
   // 不走那个脚本，而安全默认值必须处处生效——只在部署那条路上过滤，等于把
   // 「我先看看生成出来什么样」这条最常走的路留在外面。
@@ -188,7 +247,7 @@ export function generate({
   }
   // ── 页面。**排页面这件事在 pages.js 里**，那是一个纯函数，扩展也在用同一份。
   // 这里只做它做不了的两件事：把图片字节从 WARC 里搬出来，和把文本写到盘上。
-  const built = buildPages(p, { images: paths, coverBySubject });
+  const built = buildPages(p, { images: paths, coverBySubject, siteTitle: resolvedTitle });
   const { files, remote, search } = built;
 
   // ── 可选：把那个最小 Hugo 骨架一并拷进去，让产出目录直接 `hugo server` 就能跑
@@ -201,6 +260,7 @@ export function generate({
     theme = themeDir;
     if (sourceRepo) writeSourceRepo(join(outDir, 'hugo.toml'), sourceRepo);
     if (includePrivate) writeIncludePrivate(join(outDir, 'hugo.toml'));
+    writeSiteTitle(join(outDir, 'hugo.toml'), resolvedTitle);
   }
 
   for (const [rel, text] of files) {
@@ -211,6 +271,7 @@ export function generate({
 
   return {
     ...built.stats,
+    siteTitle: resolvedTitle,
     // **按字节算，不按 .length 算。** JS 的字符串长度是 UTF-16 码元数，
     // 一个汉字算 1，而它在 UTF-8 里是 3 个字节——索引里绝大部分是中文，
     // 用 .length 报出来会少算三分之二。

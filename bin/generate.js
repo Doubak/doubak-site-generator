@@ -15,9 +15,10 @@ const args = process.argv.slice(2);
 // **默认带上那个最小 Hugo 骨架**，让产出目录直接能跑起来。
 // 不想要（比如要换成现成的主题）就 --no-theme。
 const withTheme = !args.includes('--no-theme');
+const siteTitle = args.find((a) => a.startsWith('--site-title='))?.slice('--site-title='.length) || null;
 const [canonDir, bundlesDir, outDir = 'site-out'] = args.filter((a) => !a.startsWith('--'));
 if (!canonDir) {
-  console.error('用法: node bin/generate.js <canonical 目录> <bundle 目录> [产出目录] [--no-theme]');
+  console.error('用法: node bin/generate.js <canonical 目录> <bundle 目录> [产出目录] [--no-theme] [--site-title=<标题>]');
   process.exit(2);
 }
 
@@ -29,6 +30,7 @@ const r = generate({
   bundlesDir,
   outDir,
   themeDir: withTheme ? join(HERE, '..', 'theme', 'hugo') : null,
+  siteTitle,
 });
 
 console.log(

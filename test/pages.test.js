@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { generate } from '../src/generate.js';
+import { generate, resolveSiteTitle } from '../src/generate.js';
 
 /** 骨架目录。有几条判据要把生成器与主题里的同一份约定钉在一起。 */
 const THEME_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'theme', 'hugo');
@@ -2336,4 +2336,45 @@ describe('0 个条目的类别不显示在首页与导航', () => {
     assert.ok(existsSync(join(out, 'content/group/t1.md')));
     assert.ok(existsSync(join(out, 'content/group/joins.md')));
   });
+
+  describe('站点标题与昵称呈现', () => {
+    test('resolveSiteTitle 级联回退规则', () => {
+      // 1. 显式指定最高优先级
+      assert.equal(resolveSiteTitle({}, '自定义站名'), '自定义站名');
+
+      // 2. 存在 nickname / displayName
+      assert.equal(resolveSiteTitle({ marks: [{ account: { nickname: 'MewX' } }] }), 'MewX的豆瓣存档');
+      assert.equal(resolveSiteTitle({ profile: { nickname: '叔叔' } }), '叔叔的豆瓣存档');
+
+      // 3. 只有 username
+      assert.equal(resolveSiteTitle({ marks: [{ account: { username: 'mewcatcher' } }] }), 'mewcatcher的豆瓣存档');
+
+      // 4. 只有 user_id
+      assert.equal(resolveSiteTitle({ marks: [{ account: { user_id: '82160871' } }] }), '82160871的豆瓣存档');
+
+      // 5. 兜底
+      assert.equal(resolveSiteTitle({}), '我的豆瓣存档');
+    });
+
+    test('站点标题写入首页 front matter 与 hugo.toml', () => {
+      const out = mkdtempSync(join(tmpdir(), 'doubak-title-'));
+      generate({
+        canonical: {
+          marks: [mark({ account: { user_id: '82160871', username: 'mewcatcher', nickname: 'MewX' } })],
+          subjects: [],
+          longform: [],
+          broadcasts: [],
+        },
+        outDir: out,
+        themeDir: THEME_DIR,
+      });
+
+      const home = readFileSync(join(out, 'content/_index.md'), 'utf-8');
+      assert.match(home, /title:\s*"?MewX的豆瓣存档"?/);
+
+      const toml = readFileSync(join(out, 'hugo.toml'), 'utf-8');
+      assert.match(toml, /title = "MewX的豆瓣存档"/);
+    });
+  });
 });
+
