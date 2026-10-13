@@ -119,14 +119,19 @@ npm 社区中的 `hugo-bin` 等封装包本质上也是下载官方二进制，�
 ### 站点标题与作者身份呈现
 
 生成的站点标题（用于首页大标题、导航栏与各页面 `<title>`）默认具备明确的作者身份归属，不再是写死的泛指「我的豆瓣存档」：
+
 - **自动级联回退**：自动从归档记录（`account.nickname` 或 `displayName`）中提取用户昵称生成 `<昵称>的豆瓣存档`（如 `MewX的豆瓣存档`）。若无昵称，依次回退至 `<username>的豆瓣存档`、`<user_id>的豆瓣存档`，最后兜底回退至 `我的豆瓣存档`。
-- **显式指定**：支持通过 `--site-title=<标题>`（或 `--site-title <标题>`）显式自定义全站标题。
+- **显式指定**：`md` / `site` / `serve` / `deploy` 均支持 `--site-title=<标题>`（或 `--site-title <标题>`）。标题为空或缺少值时先报用法错误，不生成文件。
+
+标题只从档案账号资料取值，不使用豆列作者等第三方身份；输入中含多个 UID 时会在
+生成页面前报错并列出 UID，显式标题也不能绕过。应先按账号分开输入；`--account`
+选择参数与 `profile.ndjson` 的持久化尚不属于本次标题功能。
 
 ## 浏览器扩展中的同构支持
 
 在无需安装 Node 环境的情况下，豆备浏览器扩展的「导出」页面可直接导出完全相同的 Markdown 结构树（包含完整的本地图片）。
 底层复用了本项目完全相同的核心模块：`pages.js`、`projection.js`、`markdown.js`、`search.js`、
-`yaml.js` 及 `image-index.js` 逐字节同步至扩展的 `src/vendor/site-generator/` 目录，
+`yaml.js`、`site-title.js` 及 `image-index.js` 逐字节同步至扩展的 `src/vendor/site-generator/` 目录，
 由双向 CI 脚本 `tools/sync-vendor.mjs --check` 保证代码同步状态。
 
 为此，系统将**纯计算逻辑**与 I/O 操作进行了解耦分离，明确「输入输出差异由各宿主独立处理，数据解析与页面生成逻辑保持单一实现」：

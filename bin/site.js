@@ -17,40 +17,19 @@ import { fileURLToPath } from 'node:url';
 import { generate } from '../src/generate.js';
 import { ensureHugo } from '../src/hugo-bin.js';
 import { readCanonical } from '../src/canonical.js';
+import { parseCliArgs } from '../src/cli-args.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
-const serve = args.includes('--serve');
-const repoEq = args.find((a) => a.startsWith('--source-repo='));
-let sourceRepo = repoEq ? repoEq.slice('--source-repo='.length) : null;
-if (!sourceRepo) {
-  const idx = args.indexOf('--source-repo');
-  if (idx >= 0 && args[idx + 1] && !args[idx + 1].startsWith('--')) {
-    sourceRepo = args[idx + 1];
-  }
+let parsed;
+try { parsed = parseCliArgs(args); } catch (error) {
+  console.error(error.message);
+  process.exit(2);
 }
-
-const titleEq = args.find((a) => a.startsWith('--site-title='));
-let siteTitle = titleEq ? titleEq.slice('--site-title='.length) : null;
-if (!siteTitle) {
-  const idx = args.indexOf('--site-title');
-  if (idx >= 0 && args[idx + 1] && !args[idx + 1].startsWith('--')) {
-    siteTitle = args[idx + 1];
-  }
-}
-
-const nonFlagArgs = [];
-for (let i = 0; i < args.length; i++) {
-  const a = args[i];
-  if (a === '--site-title' || a === '--source-repo') {
-    i++;
-    continue;
-  }
-  if (!a.startsWith('--')) {
-    nonFlagArgs.push(a);
-  }
-}
-const [canonDir, bundlesDir, outDir = 'site-out'] = nonFlagArgs;
+const serve = parsed.flags.has('--serve');
+const noTheme = parsed.flags.has('--no-theme');
+const { sourceRepo, siteTitle } = parsed;
+const [canonDir, bundlesDir, outDir = 'site-out'] = parsed.positionals;
 
 if (!canonDir) {
   console.error('用法: node bin/site.js <canonical 目录> <bundle 目录> [产出目录] [--serve] [--no-theme] [--source-repo=<url>] [--site-title=<标题>]');
@@ -74,6 +53,7 @@ const r = generate({
   themeDir: join(HERE, '..', 'theme', 'hugo'),
   sourceRepo,
   siteTitle,
+  includePrivate: parsed.flags.has('--include-private'),
 });
 
 console.log(

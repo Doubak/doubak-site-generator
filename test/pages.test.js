@@ -7,12 +7,55 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { generate, resolveSiteTitle } from '../src/generate.js';
+
+test('空白昵称继续回退；unknown 只在 UID 字段里是哨兵', () => {
+  assert.equal(resolveSiteTitle({ account: { nickname: '  ', displayName: '展示名' } }), '展示名的豆瓣存档');
+  assert.equal(resolveSiteTitle({ account: { nickname: 'unknown', user_id: '123' } }), 'unknown的豆瓣存档');
+  assert.equal(resolveSiteTitle({ account: { user_id: ' unknown ' } }), '我的豆瓣存档');
+});
+
+test('多账号建站在写文件前拒绝；显式站名也不能绕过', () => {
+  const out = mkdtempSync(join(tmpdir(), 'doubak-mixed-title-'));
+  const canonical = { marks: [mark(), mark({ account: { user_id: '999', nickname: '别人' } })] };
+  for (const siteTitle of [null, '自定义站名']) {
+    assert.throws(() => generate({ canonical, outDir: out, siteTitle }), /82160871.*999|999.*82160871/);
+    assert.deepEqual(readdirSync(out), [], '预检失败不能留下半份站点');
+  }
+});
+
+test('标题中的美元替换符、引号、反斜杠与换行原样写进 TOML', () => {
+  const out = mkdtempSync(join(tmpdir(), 'doubak-literal-title-'));
+  const title = 'A $& $` $\' $$ "引号" \\ 路径\n换行';
+  generate({ canonical: {}, outDir: out, themeDir: THEME_DIR, siteTitle: title });
+  const toml = readFileSync(join(out, 'hugo.toml'), 'utf-8');
+  const line = toml.split('\n').filter((s) => s.startsWith('title = '));
+  assert.equal(line.length, 1);
+  assert.equal(JSON.parse(line[0].slice('title = '.length)), title);
+});
+
+test('配置已经是相同站名时不重复加键，也不覆盖表内的 title', () => {
+  const theme = mkdtempSync(join(tmpdir(), 'doubak-title-theme-'));
+  const out = mkdtempSync(join(tmpdir(), 'doubak-title-out-'));
+  writeFileSync(join(theme, 'hugo.toml'), 'title = "已有标题"\n[params]\ntitle = "小节标题"\n');
+  generate({ canonical: {}, outDir: out, themeDir: theme, siteTitle: '已有标题' });
+  const toml = readFileSync(join(out, 'hugo.toml'), 'utf-8');
+  assert.equal(toml, 'title = "已有标题"\n[params]\ntitle = "小节标题"\n');
+});
+
+test('只有广播、长文、豆列、相册或小组记录时仍能取到档案作者', () => {
+  for (const type of ['marks', 'broadcasts', 'longform', 'doulists', 'albums', 'group_topics', 'group_joins']) {
+    assert.equal(resolveSiteTitle({ [type]: [{ account: { user_id: '123', nickname: '档案作者' } }] }),
+      '档案作者的豆瓣存档', type);
+  }
+  assert.equal(resolveSiteTitle({ marks: [{ account: { user_id: '123' }, owner: { nickname: '第三方' } }] }),
+    '123的豆瓣存档', '不能把内容里的第三方作者当作档案主人');
+});
 
 /** 骨架目录。有几条判据要把生成器与主题里的同一份约定钉在一起。 */
 const THEME_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'theme', 'hugo');

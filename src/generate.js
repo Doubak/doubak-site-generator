@@ -29,6 +29,9 @@ import { indexImages, exportImages, reallyMissing } from './images.js';
 import { buildSearchIndex } from './search.js';
 import { frontMatter } from './yaml.js';import { buildPages } from './pages.js';
 import { withoutPrivate } from './private.js';
+import { resolveSiteTitle } from './site-title.js';
+
+export { resolveSiteTitle } from './site-title.js';
 
 /**
  * @param {object} opts
@@ -101,65 +104,18 @@ function writeIncludePrivate(tomlPath) {
   ]);
 }
 
-/**
- * 确定站点标题。
- *
- * 级联回退规则：
- * 1. 显式指定的 siteTitle
- * 2. profile / canonical records 中的 nickname / displayName（形如「<昵称>的豆瓣存档」）
- * 3. username（形如「<username>的豆瓣存档」）
- * 4. user_id（形如「<user_id>的豆瓣存档」）
- * 5. 兜底「我的豆瓣存档」
- *
- * @param {object} canonical
- * @param {string|null} [explicitTitle]
- * @returns {string}
- */
-export function resolveSiteTitle(canonical, explicitTitle = null) {
-  if (explicitTitle && typeof explicitTitle === 'string' && explicitTitle.trim()) {
-    return explicitTitle.trim();
-  }
-  const findInRecords = (field) => {
-    const directVal = canonical?.[field] ?? canonical?.account?.[field];
-    if (typeof directVal === 'string' && directVal.trim() && directVal !== 'unknown') return directVal.trim();
-
-    for (const key of ['account', 'profile', 'marks', 'longform', 'broadcasts', 'albums', 'groupTopics', 'group_topics', 'groupJoins', 'group_joins', 'doulists']) {
-      const target = canonical?.[key];
-      if (Array.isArray(target)) {
-        for (const item of target) {
-          const val = item?.[field] ?? item?.account?.[field];
-          if (typeof val === 'string' && val.trim() && val !== 'unknown') return val.trim();
-        }
-      } else if (target && typeof target === 'object') {
-        const val = target?.[field] ?? target?.account?.[field];
-        if (typeof val === 'string' && val.trim() && val !== 'unknown') return val.trim();
-      }
-    }
-    return null;
-  };
-
-  const nickname = findInRecords('nickname') ?? findInRecords('displayName');
-  if (nickname) return `${nickname}的豆瓣存档`;
-
-  const username = findInRecords('username');
-  if (username) return `${username}的豆瓣存档`;
-
-  const userId = findInRecords('user_id');
-  if (userId) return `${userId}的豆瓣存档`;
-
-  return '我的豆瓣存档';
-}
-
 /** @param {string} tomlPath @param {string} title */
 function writeSiteTitle(tomlPath, title) {
-  if (!title) return;
   const text = readFileSync(tomlPath, 'utf-8');
-  const replaced = text.replace(/^title\s*=\s*['"][^'"]*['"]/m, `title = ${JSON.stringify(title)}`);
-  if (replaced !== text) {
-    writeFileSync(tomlPath, replaced, 'utf-8');
-  } else {
-    writeFileSync(tomlPath, `title = ${JSON.stringify(title)}\n` + text, 'utf-8');
-  }
+  // 只改顶层键，不能把 [params] 内的 title 当成全站标题。
+  const tableAt = text.search(/^[ \t]*\[/m);
+  const root = tableAt < 0 ? text : text.slice(0, tableAt);
+  const tables = tableAt < 0 ? '' : text.slice(tableAt);
+  const line = /^[ \t]*title[ \t]*=[^\r\n]*(?:\r?\n|$)/m;
+  const replacement = `title = ${JSON.stringify(title)}\n`;
+  // 回调返回值按字面写入；字符串替换会把昵称中的 $& / $` / $' 当成指令。
+  const replaced = line.test(root) ? root.replace(line, () => replacement) : replacement + root;
+  writeFileSync(tomlPath, replaced + tables, 'utf-8');
 }
 
 export function generate({
