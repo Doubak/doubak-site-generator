@@ -10,14 +10,21 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generate } from '../src/generate.js';
 import { readCanonical } from '../src/canonical.js';
+import { parseCliArgs } from '../src/cli-args.js';
 
 const args = process.argv.slice(2);
+let parsed;
+try { parsed = parseCliArgs(args); } catch (error) {
+  console.error(error.message);
+  process.exit(2);
+}
 // **默认带上那个最小 Hugo 骨架**，让产出目录直接能跑起来。
 // 不想要（比如要换成现成的主题）就 --no-theme。
-const withTheme = !args.includes('--no-theme');
-const [canonDir, bundlesDir, outDir = 'site-out'] = args.filter((a) => !a.startsWith('--'));
+const withTheme = !parsed.flags.has('--no-theme');
+const { siteTitle } = parsed;
+const [canonDir, bundlesDir, outDir = 'site-out'] = parsed.positionals;
 if (!canonDir) {
-  console.error('用法: node bin/generate.js <canonical 目录> <bundle 目录> [产出目录] [--no-theme]');
+  console.error('用法: node bin/generate.js <canonical 目录> <bundle 目录> [产出目录] [--no-theme] [--site-title=<标题>]');
   process.exit(2);
 }
 
@@ -29,6 +36,9 @@ const r = generate({
   bundlesDir,
   outDir,
   themeDir: withTheme ? join(HERE, '..', 'theme', 'hugo') : null,
+  siteTitle,
+  sourceRepo: parsed.sourceRepo,
+  includePrivate: parsed.flags.has('--include-private'),
 });
 
 console.log(

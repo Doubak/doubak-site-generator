@@ -31,7 +31,7 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
  * 扩展要拿走的入口。**改这张表就是在改跨仓库的契约**——扩展那边
  * `tools/sync-vendor.mjs` 有一份对应的名单。
  */
-const PORTABLE_ENTRIES = ['pages.js', 'image-index.js'];
+const PORTABLE_ENTRIES = ['pages.js', 'image-index.js', 'site-title.js'];
 
 test('pages.js / image-index.js 及其传递依赖都不 import node: 内建模块', async () => {
   const seen = new Set();

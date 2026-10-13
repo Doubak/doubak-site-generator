@@ -35,16 +35,22 @@ import { fileURLToPath } from 'node:url';
 import { generate } from '../src/generate.js';
 import { ensureHugo } from '../src/hugo-bin.js';
 import { readCanonical } from '../src/canonical.js';
+import { parseCliArgs } from '../src/cli-args.js';
 import { privateContent, withoutPrivate, DROPPABLE, PRIVATE_BY_DEFAULT } from '../src/private.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
-const dryRun = args.includes('--dry-run');
-const sourceRepo = args.find((a) => a.startsWith('--source-repo='))?.slice('--source-repo='.length) || null;
-const [canonDir, bundlesDir, repoDir] = args.filter((a) => !a.startsWith('--'));
+let parsed;
+try { parsed = parseCliArgs(args); } catch (error) {
+  console.error(error.message);
+  process.exit(2);
+}
+const dryRun = parsed.flags.has('--dry-run');
+const { sourceRepo, siteTitle } = parsed;
+const [canonDir, bundlesDir, repoDir] = parsed.positionals;
 
 if (!canonDir || !bundlesDir || !repoDir) {
-  console.error('用法: node bin/deploy.js <canonical 目录> <bundle 目录> <仓库目录> [--dry-run] [--source-repo=<url>]');
+  console.error('用法: node bin/deploy.js <canonical 目录> <bundle 目录> <仓库目录> [--dry-run] [--source-repo=<url>] [--site-title=<标题>]');
   console.error('  --include-private   把豆瓣上不公开的东西也发出去（私密日记、私密豆列、只有自己');
   console.error('                      看得见的广播），页面上带一枚锁标。**默认不发**');
   console.error('  --drop-notes=author,platform,unsure  再额外去掉哪几类日记（或 all）。与上面那个');
@@ -84,8 +90,8 @@ const canonical = readCanonical(canonDir);
 // **拿原始那份点名，不是筛过的那份。** 铺进仓库是不可逆的，而预演是它前面唯一
 // 一道——印「这几条被留下了」和「这几条被去掉了」都要从完整的数据里数。
 const priv = privateContent(canonical);
-const includePrivate = args.includes('--include-private');
-const drop = (args.find((a) => a.startsWith('--drop-notes='))?.slice('--drop-notes='.length) ?? '')
+const includePrivate = parsed.flags.has('--include-private');
+const drop = (parsed.dropNotes ?? '')
   .split(',').map((x) => x.trim()).filter(Boolean);
 for (const d of drop) {
   if (d !== 'all' && !DROPPABLE.includes(d)) {
@@ -103,6 +109,7 @@ const r = generate({
   outDir: stage,
   themeDir: join(HERE, '..', 'theme', 'hugo'),
   sourceRepo,
+  siteTitle,
 });
 console.log(`① 生成 ${r.pages} 页 · 图片 ${r.images.written} 张 · ${Date.now() - t0} ms`);
 

@@ -7,12 +7,55 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { generate } from '../src/generate.js';
+import { generate, resolveSiteTitle } from '../src/generate.js';
+
+test('空白昵称继续回退；unknown 只在 UID 字段里是哨兵', () => {
+  assert.equal(resolveSiteTitle({ account: { nickname: '  ', displayName: '展示名' } }), '展示名的豆瓣存档');
+  assert.equal(resolveSiteTitle({ account: { nickname: 'unknown', user_id: '123' } }), 'unknown的豆瓣存档');
+  assert.equal(resolveSiteTitle({ account: { user_id: ' unknown ' } }), '我的豆瓣存档');
+});
+
+test('多账号建站在写文件前拒绝；显式站名也不能绕过', () => {
+  const out = mkdtempSync(join(tmpdir(), 'doubak-mixed-title-'));
+  const canonical = { marks: [mark(), mark({ account: { user_id: '999', nickname: '别人' } })] };
+  for (const siteTitle of [null, '自定义站名']) {
+    assert.throws(() => generate({ canonical, outDir: out, siteTitle }), /82160871.*999|999.*82160871/);
+    assert.deepEqual(readdirSync(out), [], '预检失败不能留下半份站点');
+  }
+});
+
+test('标题中的美元替换符、引号、反斜杠与换行原样写进 TOML', () => {
+  const out = mkdtempSync(join(tmpdir(), 'doubak-literal-title-'));
+  const title = 'A $& $` $\' $$ "引号" \\ 路径\n换行';
+  generate({ canonical: {}, outDir: out, themeDir: THEME_DIR, siteTitle: title });
+  const toml = readFileSync(join(out, 'hugo.toml'), 'utf-8');
+  const line = toml.split('\n').filter((s) => s.startsWith('title = '));
+  assert.equal(line.length, 1);
+  assert.equal(JSON.parse(line[0].slice('title = '.length)), title);
+});
+
+test('配置已经是相同站名时不重复加键，也不覆盖表内的 title', () => {
+  const theme = mkdtempSync(join(tmpdir(), 'doubak-title-theme-'));
+  const out = mkdtempSync(join(tmpdir(), 'doubak-title-out-'));
+  writeFileSync(join(theme, 'hugo.toml'), 'title = "已有标题"\n[params]\ntitle = "小节标题"\n');
+  generate({ canonical: {}, outDir: out, themeDir: theme, siteTitle: '已有标题' });
+  const toml = readFileSync(join(out, 'hugo.toml'), 'utf-8');
+  assert.equal(toml, 'title = "已有标题"\n[params]\ntitle = "小节标题"\n');
+});
+
+test('只有广播、长文、豆列、相册或小组记录时仍能取到档案作者', () => {
+  for (const type of ['marks', 'broadcasts', 'longform', 'doulists', 'albums', 'group_topics', 'group_joins']) {
+    assert.equal(resolveSiteTitle({ [type]: [{ account: { user_id: '123', nickname: '档案作者' } }] }),
+      '档案作者的豆瓣存档', type);
+  }
+  assert.equal(resolveSiteTitle({ marks: [{ account: { user_id: '123' }, owner: { nickname: '第三方' } }] }),
+    '123的豆瓣存档', '不能把内容里的第三方作者当作档案主人');
+});
 
 /** 骨架目录。有几条判据要把生成器与主题里的同一份约定钉在一起。 */
 const THEME_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'theme', 'hugo');
@@ -2336,4 +2379,48 @@ describe('0 个条目的类别不显示在首页与导航', () => {
     assert.ok(existsSync(join(out, 'content/group/t1.md')));
     assert.ok(existsSync(join(out, 'content/group/joins.md')));
   });
+
+  describe('站点标题与昵称呈现', () => {
+    test('resolveSiteTitle 级联回退规则', () => {
+      // 1. 显式指定最高优先级
+      assert.equal(resolveSiteTitle({}, '自定义站名'), '自定义站名');
+
+      // 2. 存在 nickname / displayName（嵌套在记录内或直接在 canonical.account）
+      assert.equal(resolveSiteTitle({ marks: [{ account: { nickname: 'MewX' } }] }), 'MewX的豆瓣存档');
+      assert.equal(resolveSiteTitle({ profile: { nickname: '叔叔' } }), '叔叔的豆瓣存档');
+      assert.equal(resolveSiteTitle({ account: { nickname: '直接账号' } }), '直接账号的豆瓣存档');
+
+      // 3. 只有 username
+      assert.equal(resolveSiteTitle({ marks: [{ account: { username: 'mewcatcher' } }] }), 'mewcatcher的豆瓣存档');
+      assert.equal(resolveSiteTitle({ account: { username: 'direct_user' } }), 'direct_user的豆瓣存档');
+
+      // 4. 只有 user_id
+      assert.equal(resolveSiteTitle({ marks: [{ account: { user_id: '82160871' } }] }), '82160871的豆瓣存档');
+      assert.equal(resolveSiteTitle({ account: { user_id: '123456' } }), '123456的豆瓣存档');
+
+      // 5. 兜底
+      assert.equal(resolveSiteTitle({}), '我的豆瓣存档');
+    });
+
+    test('站点标题写入首页 front matter 与 hugo.toml', () => {
+      const out = mkdtempSync(join(tmpdir(), 'doubak-title-'));
+      generate({
+        canonical: {
+          marks: [mark({ account: { user_id: '82160871', username: 'mewcatcher', nickname: 'MewX' } })],
+          subjects: [],
+          longform: [],
+          broadcasts: [],
+        },
+        outDir: out,
+        themeDir: THEME_DIR,
+      });
+
+      const home = readFileSync(join(out, 'content/_index.md'), 'utf-8');
+      assert.match(home, /title:\s*"?MewX的豆瓣存档"?/);
+
+      const toml = readFileSync(join(out, 'hugo.toml'), 'utf-8');
+      assert.match(toml, /title = "MewX的豆瓣存档"/);
+    });
+  });
 });
+
