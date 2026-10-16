@@ -179,6 +179,14 @@ npm run md -- <canonical> <bundles> <out>
 - **文件名采用作品 ID 而非日期**（如 `movie/1309046.md`）：Jekyll 的 `_posts/` 默认要求 `YYYY-MM-DD-name.md` 命名，此类文件会被作为普通页面处理。保持以 ID 为文件名能够确保重新生成后 URL 永久链接（Permalink）保持稳定。
 - **`static/` 资源采用绝对根路径引用**（如 `/covers/x.jpg`）：Astro 通常映射至 `public/`，Jekyll 映射至站点根目录；若部署在包含二级路径的子路径下（如 GitHub Pages 项目主页），需自行配置路径前缀。
 
+## 账号头像与图标（待实现）
+
+当前站名支持昵称与 `--site-title`，但生成器尚未读取账号头像，也不生成个人 favicon 或页眉 logo。
+旧档案的主页 HTML 含头像链接不代表已保存图片字节。完整方案见
+[头像归档与个人站点图标设计](https://github.com/Doubak/doubak-extension/blob/main/docs/designs/account-avatar-and-site-branding.md)：
+新增 canonical profile 记录，按目标账号和主页捕获匹配本地资源，离线生成站点图标；
+无头像时继续使用文字站名。此项是设计，不改变当前八类 canonical 输入契约。
+
 ## 发布到 GitHub Pages
 
 ```sh
@@ -194,7 +202,8 @@ npm run deploy -- <canonical> <bundles> <仓库目录>             # 正式部�
 - 保留 `CNAME`、`LICENSE`、`README.md`、`.git`、`.github` 及 `.gitignore` 等仓库管理文件不受覆盖影响。
 - 清理上次部署遗留的陈旧文件，避免残留已失效或被删除条目的孤立页面。
 
-`--dry-run` 模式仅输出预演清单而不执行实际写入。由于发布至公开仓库的操作不可逆，系统在执行正式部署前均会明确打印涉及的内容范围。
+`--dry-run` 模式仅输出预演清单而不执行实际写入。由于发布至公开仓库的操作不可逆，系统在写入目标目录前会打印内容数量与识别出的可见性清单。脚本不自动提交或推送 Git；
+这份清单也不是对正文里姓名、引用和其他个人信息的完整隐私审查，发布者仍须查看生成页面。
 
 ### 豆瓣非公开内容的导出控制
 
