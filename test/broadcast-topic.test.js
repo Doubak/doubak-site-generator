@@ -62,5 +62,17 @@ test('广播正文链接投影与渲染：外链加 external，站内链到文�
   assert.ok(mdMonth.includes('[开发日志](https://doubak.com/log/example.html)'));
   assert.ok(mdMonth.includes('@[豆友69305634](https://www.douban.com/people/69305634/)'));
   assert.ok(mdMonth.includes('[寂静之人](../game/30246116.md)'));
+
+  // textParts 为空数组或 null 时正常回退至普通文本
+  b.textParts = [];
+  assert.ok(broadcastBlock(b).includes('备份豆瓣的意义吧～ 开发日志\n@豆友69305634，顺便玩了 寂静之人'));
+  b.textParts = null;
+  assert.ok(broadcastBlock(b).includes('备份豆瓣的意义吧～ 开发日志\n@豆友69305634，顺便玩了 寂静之人'));
+
+  // 链接文本含 Markdown 标点符号时正确转义
+  b.textParts = [{ text: '点我：' }, { text: ' Fate/stay [Heaven] ', href: 'https://example.com', external: true }];
+  const mdEscaped = broadcastBlock(b);
+  assert.ok(mdEscaped.includes(String.raw`[Fate/stay \[Heaven\]](https://example.com)`));
 });
+
 
