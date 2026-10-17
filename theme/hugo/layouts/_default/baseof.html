@@ -16,6 +16,9 @@
   **一个外部请求都不发**：这份备份存在的理由是不再需要豆瓣还活着才能看，
   那它自己也不该需要某个 CDN 还活着才好看。字体用系统栈。
 */}}
+{{ $avatar := partialCached "avatar.html" . }}
+{{ with $avatar.icon }}<link rel="icon" type="image/png" sizes="32x32" href="{{ . }}">{{ end }}
+{{ with $avatar.touch }}<link rel="apple-touch-icon" sizes="180x180" href="{{ . }}">{{ end }}
 <link rel="stylesheet" href="/site.css">
 </head>
 <body>
@@ -33,9 +36,9 @@
     链接（那些页面各自有自己的 h1）。看上去一模一样，样式在 `.home` 上，不在标签上。
   */}}
   {{ if .IsHome }}
-    <h1 class="home"><a href="{{ .Site.Home.RelPermalink }}">{{ .Site.Title }}</a></h1>
+    <h1 class="home{{ if $avatar.header }} has-avatar{{ end }}"><a href="{{ .Site.Home.RelPermalink }}">{{ with $avatar.header }}<img class="account-avatar" src="{{ . }}" width="40" height="40" alt="">{{ end }}{{ .Site.Title }}</a></h1>
   {{ else }}
-    <a class="home" href="{{ .Site.Home.RelPermalink }}">{{ .Site.Title }}</a>
+    <a class="home{{ if $avatar.header }} has-avatar{{ end }}" href="{{ .Site.Home.RelPermalink }}">{{ with $avatar.header }}<img class="account-avatar" src="{{ . }}" width="40" height="40" alt="">{{ end }}{{ .Site.Title }}</a>
   {{ end }}
   <nav>
     {{ range partial "sections.html" . }}

@@ -1508,8 +1508,8 @@ describe('Hugo 骨架', () => {
     //
     // 一个元素同时干两件事就没有这个矛盾：首页上它是 h1，别处是回首页的链接。
     const base = readFileSync(join(THEME, 'layouts/_default/baseof.html'), 'utf-8');
-    assert.match(base, /\{\{ if \.IsHome \}\}\s*<h1 class="home">/, '首页的页眉该是 h1');
-    assert.match(base, /\{\{ else \}\}\s*<a class="home"/, '其余页面该还是链接');
+    assert.match(base, /\{\{ if \.IsHome \}\}\s*<h1 class="home[^"]*">/, '首页的页眉该是 h1');
+    assert.match(base, /\{\{ else \}\}\s*<a class="home[^"]*"/, '其余页面该还是链接');
 
     // **先去掉 Hugo 注释再找标签。** 不去的话，那段解释「这里为什么没有 h1」的
     // 注释本身就带着 `<h1>` 三个字，判据永远为真——一条永远红的判据和一条永远

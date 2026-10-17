@@ -78,3 +78,11 @@ disableKinds = ['rss', 'sitemap']
     doulist = '豆列'
     album = '相册'
     group = '小组'
+
+# 把已归档头像提供给 Hugo 的本地图片处理器；保留默认 assets 挂载。
+[[module.mounts]]
+source = 'assets'
+target = 'assets'
+[[module.mounts]]
+source = 'static/assets/profile'
+target = 'assets/profile'

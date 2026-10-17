@@ -33,6 +33,10 @@ jobs:
 
       # 依赖是空的，不需要 npm install。这不是省事，是这个项目的立身之本之一：
       # 一个要装几百个包才能重建的存档站是自相矛盾的（见 README）。
+      - name: 安装已锁定并校验摘要的 Hugo（图标集成测试）
+        working-directory: doubak-site-generator
+        run: node bin/hugo.js version
+
       - name: 跑测试
         working-directory: doubak-site-generator
         run: npm test

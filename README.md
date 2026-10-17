@@ -125,13 +125,13 @@ npm 社区中的 `hugo-bin` 等封装包本质上也是下载官方二进制，�
 
 标题只从档案账号资料取值，不使用豆列作者等第三方身份；输入中含多个 UID 时会在
 生成页面前报错并列出 UID，显式标题也不能绕过。应先按账号分开输入；`--account`
-选择参数与 `profile.ndjson` 的持久化尚不属于本次标题功能。
+选择参数尚未实现；`profile.ndjson` 的最新资料优先用于站名。
 
 ## 浏览器扩展中的同构支持
 
 在无需安装 Node 环境的情况下，豆备浏览器扩展的「导出」页面可直接导出完全相同的 Markdown 结构树（包含完整的本地图片）。
 底层复用了本项目完全相同的核心模块：`pages.js`、`projection.js`、`markdown.js`、`search.js`、
-`yaml.js`、`site-title.js` 及 `image-index.js` 逐字节同步至扩展的 `src/vendor/site-generator/` 目录，
+`yaml.js`、`site-title.js`、`image-index.js`、`avatar.js` 及 `avatar-image.js` 逐字节同步至扩展的 `src/vendor/site-generator/` 目录，
 由双向 CI 脚本 `tools/sync-vendor.mjs --check` 保证代码同步状态。
 
 为此，系统将**纯计算逻辑**与 I/O 操作进行了解耦分离，明确「输入输出差异由各宿主独立处理，数据解析与页面生成逻辑保持单一实现」：
@@ -179,13 +179,25 @@ npm run md -- <canonical> <bundles> <out>
 - **文件名采用作品 ID 而非日期**（如 `movie/1309046.md`）：Jekyll 的 `_posts/` 默认要求 `YYYY-MM-DD-name.md` 命名，此类文件会被作为普通页面处理。保持以 ID 为文件名能够确保重新生成后 URL 永久链接（Permalink）保持稳定。
 - **`static/` 资源采用绝对根路径引用**（如 `/covers/x.jpg`）：Astro 通常映射至 `public/`，Jekyll 映射至站点根目录；若部署在包含二级路径的子路径下（如 GitHub Pages 项目主页），需自行配置路径前缀。
 
-## 账号头像与图标（待实现）
+## 账号头像与图标
 
-当前站名支持昵称与 `--site-title`，但生成器尚未读取账号头像，也不生成个人 favicon 或页眉 logo。
-旧档案的主页 HTML 含头像链接不代表已保存图片字节。完整方案见
-[头像归档与个人站点图标设计](https://github.com/Doubak/doubak-extension/blob/main/docs/designs/account-avatar-and-site-branding.md)：
-新增 canonical profile 记录，按目标账号和主页捕获匹配本地资源，离线生成站点图标；
-无头像时继续使用文字站名。此项是设计，不改变当前八类 canonical 输入契约。
+生成器读取可选的 `profile.ndjson`，按最新明确的主页观测匹配同账号、同父 capture 的头像。
+只使用已归档字节，不联网补图；同 URL 换图按新观测选择，缺图、损坏或明确默认头像时保留文字站名。
+旧八文件 canonical 与只有主页 HTML、没有头像资源的旧 bundle 继续支持。
+
+Markdown 导出写入 `static/assets/profile/<UID>/<SHA-256>.<ext>` 和通用的 `site-profile.json`；
+扩展的文件夹 / ZIP 导出使用相同规则。sidecar 包含版本、UID、昵称、本地路径、观测时间与
+`status`（`ok` / `default` / `unobserved` / `missing` / `unreadable`），没有远程 fallback URL。
+第三方平台导出不将资料当作评分记录。
+
+Hugo 骨架离线生成 32×32 PNG favicon、180×180 touch icon 与 96×96 页眉图（显示 40 px）。
+等比缩小、透明补边、不放大小图，GIF 使用首帧；支持 JPEG / PNG / GIF / WebP，拒绝 SVG。
+写出原图前核对 SHA-256、MIME、文件头 / 容器与尺寸上限（5 MiB、每边 4096、总计 16M 像素）；
+完整像素解码在 Hugo 构建时执行，失败会警告并降级为文字，不生成损坏的图标标签。
+Markdown-only 消费者需自行解码；`status: ok` 表示字节与结构检查通过，不代表完成像素解码。
+所有页面图标均为本地相对链接，支持直接双击 HTML 和子目录部署。
+
+完整证据与兼容约定见[头像设计](https://github.com/Doubak/doubak-extension/blob/main/docs/designs/account-avatar-and-site-branding.md)。
 
 ## 发布到 GitHub Pages
 
