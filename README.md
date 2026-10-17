@@ -11,6 +11,8 @@ npm run md    -- <canonical 目录> <bundle 目录> [产出目录]   # 输出 Ma
 npm run site  -- <canonical 目录> <bundle 目录> [产出目录]   # 进一步构建为完整 HTML 站点
 npm run serve  -- <canonical 目录> <bundle 目录> [产出目录]  # 启动本地预览服务器
 npm run deploy -- <canonical 目录> <bundle 目录> <仓库目录>  # 部署至 GitHub Pages 仓库
+#                 [--account=<uid>]                         # 仅生成指定账号的站点（解决多账号混放）
+#                 [--all-accounts]                          # 按账号分流，分别生成到 <产出目录>/<uid>/
 #                 [--include-private]                       # 导出私密数据（默认排除）
 #                 [--site-title=<标题>]                     # 自定义站点标题（默认 <昵称>的豆瓣存档）
 npm test                                                    # node --test，零依赖
@@ -41,11 +43,18 @@ npm run site -- ~/downloads/canonical ~/downloads/exports ~/downloads/site
 npm 脚本对应的底层执行命令：
 
 ```sh
-node bin/generate.js <canonical> <bundles> [out] [--no-theme]
-node bin/site.js     <canonical> <bundles> [out] [--serve]
+node bin/generate.js <canonical> <bundles> [out] [--account=<uid>] [--all-accounts] [--no-theme]
+node bin/site.js     <canonical> <bundles> [out] [--account=<uid>] [--all-accounts] [--serve]
 ```
 
 `--no-theme` 等同于 `npm run md` 的行为：**跳过内置的 Hugo 主题骨架**，仅输出 `content/` 与 `static/` 目录。默认情况下 `bin/generate.js` 会一并复制骨架文件，生成可直接执行构建的完整 Hugo 站点结构。若希望先定制 `layouts/` 布局模板或单独控制构建时机，可采用此流程。（`bin/site.js` 在指定 `--no-theme` 时会报错终止：缺少 `layouts/` 模板将导致 Hugo 无法执行渲染。）
+
+### 多账号隔离与深层图片自动索引
+
+- **深层子目录递归感知**：传入的 `<bundle 目录>` 会被深度递归遍历。即使历史归档分散在各个子目录（例如按备份日期归类的文件夹），生成器也会自动递归探测所有的 bundle 索引与图片，并内置软链接防环保护与 bundle 边界剪枝，绝不漏图。
+- **Fail-Fast 账号隔离**：当传入的 Canonical 包含多个不同账号的数据时，站点生成器会拒绝生成混乱的“双头怪兽”站点并中断退出。
+- **单账号隔离（`--account <uid>`）**：只筛选指定账号的内容、头像与归档图片，安全生成单一专属站点。
+- **批量自动分治（`--all-accounts`）**：自动按账号分流，在 `<产出目录>/<uid>/` 下各自生成独立的静态站点。
 
 产物目录结构：
 
