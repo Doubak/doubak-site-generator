@@ -25,7 +25,7 @@ import {
   markFilterPath, markFilterPage, broadcastBlock, plainText, coverStripItem,
   sectionIndexPath, sectionIndexPage,
 } from './markdown.js';
-import { indexImages, exportImages, reallyMissing } from './images.js';
+import { indexImages, exportImages, exportAvatar, reallyMissing } from './images.js';
 import { buildSearchIndex } from './search.js';
 import { frontMatter } from './yaml.js';import { buildPages } from './pages.js';
 import { withoutPrivate } from './private.js';
@@ -123,6 +123,7 @@ export function generate({
   includePrivate = false, dropNotes = [], siteTitle = null,
 }) {
   const resolvedTitle = resolveSiteTitle(canonical, siteTitle);
+  const imageIndex = bundlesDir ? indexImages(bundlesDir) : null;
   // **筛选放在这儿，不放在 bin/deploy.js 里。** `npm run md` 与 `npm run site`
   // 不走那个脚本，而安全默认值必须处处生效——只在部署那条路上过滤，等于把
   // 「我先看看生成出来什么样」这条最常走的路留在外面。
@@ -170,7 +171,7 @@ export function generate({
       if (j.iconUrl) wanted.add(j.iconUrl);
     }
     const res = exportImages({
-      index: indexImages(bundlesDir),
+      index: imageIndex,
       wanted,
       // **按作品 id 再找一遍封面。** canonical 里的 cover_url 取自列表页缩略图，
       // 而档案里存的是详情页封面——多数媒介两者恰好同一个文件，舞台剧那种不是。
@@ -204,6 +205,7 @@ export function generate({
       remote: [],
     };
   }
+  const avatar = exportAvatar({ canonical, index: imageIndex, outDir });
   // ── 页面。**排页面这件事在 pages.js 里**，那是一个纯函数，扩展也在用同一份。
   // 这里只做它做不了的两件事：把图片字节从 WARC 里搬出来，和把文本写到盘上。
   const built = buildPages(p, { images: paths, coverBySubject, siteTitle: resolvedTitle });
@@ -231,6 +233,7 @@ export function generate({
   return {
     ...built.stats,
     siteTitle: resolvedTitle,
+    avatar,
     // **按字节算，不按 .length 算。** JS 的字符串长度是 UTF-16 码元数，
     // 一个汉字算 1，而它在 UTF-8 里是 3 个字节——索引里绝大部分是中文，
     // 用 .length 报出来会少算三分之二。

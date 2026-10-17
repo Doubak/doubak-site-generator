@@ -5,6 +5,7 @@
  *   node bin/generate.js <canonical 目录> <bundle 目录> [产出目录]
  */
 
+import { avatarNotice } from '../src/avatar.js';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,6 +41,8 @@ const r = generate({
   sourceRepo: parsed.sourceRepo,
   includePrivate: parsed.flags.has('--include-private'),
 });
+const avatarWarning = avatarNotice(r.avatar);
+if (avatarWarning) console.log(`   ⚠ ${avatarWarning}`);
 
 console.log(
   `页面 ${r.pages}（标记 ${r.marks} · 长文 ${r.longform} · 广播 ${r.broadcasts} 条归入 ${r.broadcastMonths} 个月`

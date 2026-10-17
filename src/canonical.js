@@ -33,6 +33,7 @@ export const CANONICAL_FILES = /** @type {const} */ ({
   albums: 'albums.ndjson',
   group_topics: 'group_topics.ndjson',
   group_joins: 'group_joins.ndjson',
+  profile: 'profile.ndjson',
 });
 
 /**

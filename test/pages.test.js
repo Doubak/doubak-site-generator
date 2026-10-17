@@ -1653,7 +1653,7 @@ describe('Hugo 骨架', () => {
     assert.equal(r.theme, null);
     // 搜索索引也在里面——它是从 canonical 派生的**数据**，任何 SSG 都能用，
     // 所以不带骨架时照样产出。
-    assert.deepEqual(readdirSync(out).sort(), ['content', 'static']);
+    assert.deepEqual(readdirSync(out).sort(), ['content', 'site-profile.json', 'static']);
     const all = readdirSync(out, { recursive: true }).map(String);
     for (const f of all) {
       assert.ok(!/hugo|layouts|\.html$/i.test(f), `产出里混进了 Hugo 专属的 ${f}`);

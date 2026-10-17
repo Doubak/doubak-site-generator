@@ -25,6 +25,7 @@
  * 所以默认先把「会公开什么」摆出来，`--dry-run` 只看不写。
  */
 
+import { avatarNotice } from '../src/avatar.js';
 import {
   existsSync, readdirSync, statSync, cpSync, rmSync, writeFileSync, readFileSync,
 } from 'node:fs';
@@ -111,6 +112,8 @@ const r = generate({
   sourceRepo,
   siteTitle,
 });
+const avatarWarning = avatarNotice(r.avatar);
+if (avatarWarning) console.log(`   ⚠ ${avatarWarning}`);
 console.log(`① 生成 ${r.pages} 页 · 图片 ${r.images.written} 张 · ${Date.now() - t0} ms`);
 
 const { path: hugo } = await ensureHugo({ cacheDir: join(HERE, '..', '.hugo'), log: (m) => console.log(`   ${m}`) });

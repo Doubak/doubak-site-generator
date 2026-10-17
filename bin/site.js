@@ -9,6 +9,7 @@
  * 出来。分成两个是因为**只要 Markdown 的人是多数**——他们要换主题、要塞进已有的站点。
  */
 
+import { avatarNotice } from '../src/avatar.js';
 import { spawn } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
@@ -55,6 +56,8 @@ const r = generate({
   siteTitle,
   includePrivate: parsed.flags.has('--include-private'),
 });
+const avatarWarning = avatarNotice(r.avatar);
+if (avatarWarning) console.log(`   ⚠ ${avatarWarning}`);
 
 console.log(
   `① 生成 ${r.pages} 页（标记 ${r.marks} · 长文 ${r.longform} · 广播 ${r.broadcasts} 条归入 ${r.broadcastMonths} 个月`

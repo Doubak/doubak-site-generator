@@ -18,6 +18,8 @@
 
 import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
+import { selectAvatar, avatarOutput, avatarMetadataText } from './avatar.js';
 import { join, dirname } from 'node:path';
 import {
   buildImageIndex, fileNameFor, subdirFor, reallyMissing,
@@ -49,7 +51,9 @@ export function indexImages(root) {
       for (const line of readFileSync(join(dir, idxName), 'utf-8').split('\n')) {
         if (line.trim()) rows.push(JSON.parse(line));
       }
-      bundles.push({ host: dir, rows });
+      let account = null;
+      try { account = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')).account; } catch { /* Unknown ownership cannot supply an avatar. */ }
+      bundles.push({ host: dir, rows, account });
     }
   }
 
@@ -65,7 +69,7 @@ export function indexImages(root) {
   const { byUrl, bySubject } = buildImageIndex(bundles);
   // 结果里的 `host` 就是目录名，下游按 `hit.dir` 用，所以在这儿改回来。
   const rename = (m) => new Map([...m].map(([k, v]) => [k, { dir: v.host, row: v.row }]));
-  return { byUrl: rename(byUrl), bySubject: rename(bySubject) };
+  return { byUrl: rename(byUrl), bySubject: rename(bySubject), bundles };
 }
 
 
@@ -222,4 +226,23 @@ export function exportImages({ index, wanted, wantedBySubject = new Map(), outDi
   }
   releaseSegments();
   return { paths, bySubject, written, missing, unreadable };
+}
+
+/** Account avatars never use the general URL-only image lookup. */
+export function exportAvatar({ canonical, index, outDir }) {
+  const selection = selectAvatar(canonical, index?.bundles ?? []);
+  let metadata = selection.metadata;
+  for (const hit of selection.hits) {
+    let bytes;
+    try {
+      bytes = payload(hit.host, hit.row);
+      metadata = avatarOutput(selection, hit, bytes, createHash('sha256').update(bytes).digest('hex'));
+    } catch { continue; }
+    const dest = join(outDir, 'static', metadata.avatar);
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, bytes);
+    break;
+  }
+  writeFileSync(join(outDir, 'site-profile.json'), avatarMetadataText(metadata));
+  return metadata;
 }
