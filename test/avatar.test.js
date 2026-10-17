@@ -66,6 +66,11 @@ test('filesystem export verifies WARC payload and emits local sidecar, including
  assert.deepEqual(JSON.parse(readFileSync(join(out,'site-profile.json'))),meta);
  assert.equal(exportAvatar({canonical:canonical([observation('02')]),index,outDir:out}).status,'missing');
  assert.equal(exportAvatar({canonical:{},index,outDir:out}).status,'unobserved');
+ // Each completed export releases decompressed segments. A later export must read
+ // the archive again and report newly unreadable bytes, not reuse an old buffer.
+ writeFileSync(join(dir,'assets-0.warc.gz'),Buffer.from('corrupt gzip'));
+ assert.equal(exportAvatar({canonical:canonical(),index,outDir:out}).status,'unreadable');
+ assert.equal(JSON.parse(readFileSync(join(out,'site-profile.json'))).avatar,null);
 });
 
 test('observation chronology uses actual instants and capture-ID ties, and flat legacy profiles remain optional',()=>{

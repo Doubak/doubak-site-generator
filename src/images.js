@@ -232,16 +232,20 @@ export function exportImages({ index, wanted, wantedBySubject = new Map(), outDi
 export function exportAvatar({ canonical, index, outDir }) {
   const selection = selectAvatar(canonical, index?.bundles ?? []);
   let metadata = selection.metadata;
-  for (const hit of selection.hits) {
-    let bytes;
-    try {
-      bytes = payload(hit.host, hit.row);
-      metadata = avatarOutput(selection, hit, bytes, createHash('sha256').update(bytes).digest('hex'));
-    } catch { continue; }
-    const dest = join(outDir, 'static', metadata.avatar);
-    mkdirSync(dirname(dest), { recursive: true });
-    writeFileSync(dest, bytes);
-    break;
+  try {
+    for (const hit of selection.hits) {
+      let bytes;
+      try {
+        bytes = payload(hit.host, hit.row);
+        metadata = avatarOutput(selection, hit, bytes, createHash('sha256').update(bytes).digest('hex'));
+      } catch { continue; }
+      const dest = join(outDir, 'static', metadata.avatar);
+      mkdirSync(dirname(dest), { recursive: true });
+      writeFileSync(dest, bytes);
+      break;
+    }
+  } finally {
+    releaseSegments();
   }
   writeFileSync(join(outDir, 'site-profile.json'), avatarMetadataText(metadata));
   return metadata;
