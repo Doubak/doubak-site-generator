@@ -57,6 +57,7 @@ if (!canonDir || !bundlesDir || !repoDir) {
   console.error('  --drop-notes=author,platform,unsure  再额外去掉哪几类日记（或 all）。与上面那个');
   console.error('                      方向相反：一个放宽，一个收紧，显式写的压过默认');
   console.error('  --source-repo=<url>  页脚加一行「这个站点的源码」，指这一份站点自己的仓库；默认没有。');
+  console.error('  --site-title=<标题>   全站站点标题；默认自动读取昵称生成「<昵称>的豆瓣存档」。');
   process.exit(2);
 }
 if (!existsSync(repoDir)) {
