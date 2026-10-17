@@ -27,6 +27,12 @@ test('raster bytes, MIME, bounds, checksum and truncation are checked',()=>{
    assert.throws(()=>inspectAvatar(body.subarray(0,-3),mime));
  }
  const broken=Buffer.from(bytes);broken[40]^=1;assert.throws(()=>inspectAvatar(broken,'image/png'));
+ const jpeg=readFileSync(new URL('./fixtures/avatar.jpg',import.meta.url));
+ const sof=jpeg.indexOf(Buffer.from([255,192]));assert.ok(sof>0);
+ for (const [width,height] of [[5000,1],[4096,4096]]) {
+   const dimensions=Buffer.from(jpeg);dimensions.writeUInt16BE(height,sof+5);dimensions.writeUInt16BE(width,sof+7);
+   assert.throws(()=>inspectAvatar(dimensions,'image/jpeg'),/尺寸/,'dimensions and total pixels must be bounded before decode');
+ }
 });
 test('latest explicit observation wins, including same URL; missing new asset never borrows old',()=>{
  const changed=readFileSync(new URL('./fixtures/avatar.gif',import.meta.url));

@@ -31,9 +31,9 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
  * 扩展要拿走的入口。**改这张表就是在改跨仓库的契约**——扩展那边
  * `tools/sync-vendor.mjs` 有一份对应的名单。
  */
-const PORTABLE_ENTRIES = ['pages.js', 'image-index.js', 'site-title.js'];
+const PORTABLE_ENTRIES = ['pages.js', 'image-index.js', 'site-title.js', 'avatar.js'];
 
-test('pages.js / image-index.js 及其传递依赖都不 import node: 内建模块', async () => {
+test('页面、图片与头像模块及其传递依赖都不 import node: 内建模块', async () => {
   const seen = new Set();
   const queue = PORTABLE_ENTRIES.map((e) => resolve(SRC, e));
   const bad = [];
@@ -53,6 +53,7 @@ test('pages.js / image-index.js 及其传递依赖都不 import node: 内建模�
   // 那比没有测试更糟，它给的是假的安心。pages 会拉进 projection / markdown /
   // yaml / search，所以闭包至少有 5 个文件。
   assert.ok(seen.size >= 5, `闭包只有 ${seen.size} 个文件，import 的正则大概坏了`);
+  assert.ok(seen.has(resolve(SRC, 'avatar-image.js')), '头像字节检查也必须覆盖宿主隔离');
   assert.deepEqual(bad, [], `这几个文件扩展要原样拿走，不能碰内建模块：\n${bad.join('\n')}`);
 });
 
