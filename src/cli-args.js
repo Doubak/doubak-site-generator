@@ -2,11 +2,12 @@
 
 const VALUE_OPTIONS = new Map([
   ['--site-title', 'siteTitle'], ['--source-repo', 'sourceRepo'], ['--drop-notes', 'dropNotes'],
+  ['--account', 'account'],
 ]);
 
 /** @param {string[]} args */
 export function parseCliArgs(args) {
-  const result = { positionals: [], flags: new Set(), siteTitle: null, sourceRepo: null, dropNotes: null };
+  const result = { positionals: [], flags: new Set(), siteTitle: null, sourceRepo: null, dropNotes: null, account: null };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--') {
@@ -27,6 +28,9 @@ export function parseCliArgs(args) {
     } else {
       result.positionals.push(arg);
     }
+  }
+  if (result.account && result.flags.has('--all-accounts')) {
+    throw new Error('--account 与 --all-accounts 不能同时使用');
   }
   return result;
 }

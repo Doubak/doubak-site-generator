@@ -31,6 +31,7 @@ import { buildSearchIndex } from './search.js';
 import { frontMatter } from './yaml.js';import { buildPages } from './pages.js';
 import { withoutPrivate } from './private.js';
 import { resolveSiteTitle } from './site-title.js';
+import { filterCanonicalByAccount } from './canonical.js';
 
 export { resolveSiteTitle } from './site-title.js';
 
@@ -121,10 +122,13 @@ function writeSiteTitle(tomlPath, title) {
 
 export function generate({
   canonical, bundlesDir, outDir, clean = true, themeDir = null, sourceRepo = null,
-  includePrivate = false, dropNotes = [], siteTitle = null,
+  includePrivate = false, dropNotes = [], siteTitle = null, account = null,
 }) {
+  if (account) {
+    canonical = filterCanonicalByAccount(canonical, account);
+  }
   const resolvedTitle = resolveSiteTitle(canonical, siteTitle);
-  const imageIndex = bundlesDir ? indexImages(bundlesDir) : null;
+  const imageIndex = bundlesDir ? indexImages(bundlesDir, { account }) : null;
   // **筛选放在这儿，不放在 bin/deploy.js 里。** `npm run md` 与 `npm run site`
   // 不走那个脚本，而安全默认值必须处处生效——只在部署那条路上过滤，等于把
   // 「我先看看生成出来什么样」这条最常走的路留在外面。

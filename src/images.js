@@ -16,7 +16,7 @@
  * 同样成立，站点也是派生数据。
  */
 
-import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, mkdirSync, writeFileSync, realpathSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { selectAvatar, avatarOutput, avatarMetadataText } from './avatar.js';
@@ -36,15 +36,19 @@ const SEP = '\r\n\r\n';
  * 会得到一个打不开的文件——**而那比没有文件更糟**，因为页面上看起来有图。
  *
  * @param {string} root 装着一堆 bundle 的目录
+ * @param {{account?: string}} [options]
  */
-export function indexImages(root) {
+export function indexImages(root, options = {}) {
   const bundles = [];
+  const seen = new Set();
 
   function tryReadBundle(dir) {
     let idxNames;
     try {
       idxNames = readdirSync(dir).filter((f) => f.startsWith('index-') && f.endsWith('.ndjson'));
-    } catch { return; }
+    } catch { return false; }
+    if (!idxNames.length) return false;
+
     // **一个目录里有几份索引，就读几份。**
     for (const idxName of idxNames) {
       const rows = [];
@@ -52,18 +56,45 @@ export function indexImages(root) {
         if (line.trim()) rows.push(JSON.parse(line));
       }
       let account = null;
-      try { account = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')).account; } catch { /* Unknown ownership cannot supply an avatar. */ }
+      try {
+        account = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')).account;
+      } catch { /* Unknown ownership cannot supply an avatar. */ }
+
+      if (options.account) {
+        if (account?.user_id && String(account.user_id) !== String(options.account)) {
+          continue;
+        }
+      }
+
       bundles.push({ host: dir, rows, account });
+    }
+    return true;
+  }
+
+  function walk(dir) {
+    let real;
+    try { real = realpathSync(dir); } catch { return; }
+    if (seen.has(real)) return;
+    seen.add(real);
+
+    if (tryReadBundle(dir)) {
+      return; // 命中 bundle，内部不递归
+    }
+
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch { return; }
+
+    for (const e of entries) {
+      if (e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules') {
+        walk(join(dir, e.name));
+      }
     }
   }
 
-  // 既支持 root 本身就是一份 bundle 目录，也支持 root 包含多个子 bundle 目录
-  tryReadBundle(root);
-  try {
-    for (const name of readdirSync(root)) {
-      tryReadBundle(join(root, name));
-    }
-  } catch {}
+  walk(root);
+
   // 判定在 image-index.js 里——那是个纯函数，扩展也在用同一份。
   // 这里只做它做不了的事：把 index 从盘上读出来。
   const { byUrl, bySubject } = buildImageIndex(bundles);
