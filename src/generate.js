@@ -25,6 +25,7 @@ import {
   markFilterPath, markFilterPage, broadcastBlock, plainText, coverStripItem,
   sectionIndexPath, sectionIndexPage,
 } from './markdown.js';
+import { withAlbumThumbnails } from './image-index.js';
 import { indexImages, exportImages, exportAvatar, reallyMissing } from './images.js';
 import { buildSearchIndex } from './search.js';
 import { frontMatter } from './yaml.js';import { buildPages } from './pages.js';
@@ -179,7 +180,7 @@ export function generate({
       wantedBySubject: new Set(p.marks.map((m) => m.subjectId)),
       outDir: join(outDir, 'static'),
     });
-    paths = res.paths;
+    paths = withAlbumThumbnails(res.paths, p.albums);
     coverBySubject = res.bySubject;
     // 按 URL 找不到、但按作品 id 找到了的，不算缺——那是同一张图的两个尺寸。
     // 不筛掉的话「缺 95 张」会成为一条永远存在、且已经不成立的告警，
@@ -195,7 +196,7 @@ export function generate({
       //
       // 这一条与上面那条是同一个意思：**告警要么是真的，要么就不该出现。**
       // 一条永远在的假告警会让真的那条也被忽略。
-      missing: res.missing.filter((u) => reallyMissing(u, coveredUrls)),
+      missing: res.missing.filter((u) => reallyMissing(u, coveredUrls) && !paths[u]),
       // **读不出来的一张都不筛。** 上面那两条筛选（按 id 找到了的、占位图）
       // 说的都是「这不算缺」，而它们成立的前提是那张图**本来就不该在档案里**。
       // 读不出来正好相反：它在档案里，只是坏了。任何筛选都会让一份正在腐坏的
