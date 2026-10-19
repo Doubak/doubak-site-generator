@@ -31,6 +31,7 @@ test('real Hugo: offline local icons, exact canvas sizes, old input and corrupt-
    assert.equal(pngPixels(image).pixels.filter(p => p[3] !== 0).length, 16 * 8);
  }
  const nested=readFileSync(join(dir,'public/nested/page.html'),'utf8');assert.match(nested,/src="\.\.\/assets\/profile\//);
+ assert.equal(existsSync(join(dir,'public/profile')), false, 'profile/ 不该产生，图标应统一置于 assets/profile/ 之下');
  for (const ext of ['jpg','gif','webp']) {
    const source=readFileSync(new URL(`./fixtures/avatar.${ext}`,import.meta.url));
    const name=`assets/profile/123/${hash(source)}.${ext}`;

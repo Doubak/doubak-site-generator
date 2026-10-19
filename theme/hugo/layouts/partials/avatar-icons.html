@@ -4,7 +4,7 @@
 {{ if os.FileExists "site-profile.json" }}
   {{ $profile := os.ReadFile "site-profile.json" | transform.Unmarshal }}
   {{ if and (eq $profile.status "ok") (findRE `^assets/profile/[1-9][0-9]*/[a-f0-9]{64}\.(png|jpg|gif|webp)$` ($profile.avatar | default "")) }}
-    {{ with resources.Get (strings.TrimPrefix "assets/" $profile.avatar) }}
+    {{ with resources.Get $profile.avatar }}
       {{ $source := .Process "png" }}
       {{ range $name, $size := dict "icon" 32 "touch" 180 "header" 96 }}
         {{ $image := $source }}
@@ -16,8 +16,6 @@
         {{ $right := sub (sub $size $image.Width) $left }}
         {{ $bottom := sub (sub $size $image.Height) $top }}
         {{ $image = $image.Filter (images.Process "png #00000000") (images.Padding $top $right $bottom $left "#00000000") }}
-        {{/* Keep Hugo's transformation hash so incremental rebuilds never reuse stale icons. */}}
-        {{ $image = resources.Copy (printf "%s/%s" (path.Dir $profile.avatar) (path.Base $image.RelPermalink)) $image }}
         {{/* Root-relative input lets relativeURLs handle both file:// and subpath hosting. */}}
         {{ $local := printf "/%s" (strings.TrimPrefix $baseURL $image.Permalink) }}
         {{ $result = merge $result (dict $name $local) }}

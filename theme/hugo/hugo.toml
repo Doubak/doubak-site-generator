@@ -85,4 +85,4 @@ source = 'assets'
 target = 'assets'
 [[module.mounts]]
 source = 'static/assets/profile'
-target = 'assets/profile'
+target = 'assets/assets/profile'
