@@ -145,7 +145,7 @@ describe('页面', () => {
     assert.equal(verb('game', 'doing'), '在玩');
   });
 
-  test('短评进正文，没有短评就是空正文', () => {
+  test('短评进正文，缺少短评时不编造占位文本', () => {
     // 不编一句「暂无短评」：那会让「没写」和「写了但抓不到」在页面上长得一样。
     const [p] = project({ marks: [mark()], subjects: [subject()] }).marks;
     assert.match(markPage(p), /想看的时候写的/);
@@ -154,7 +154,8 @@ describe('页面', () => {
       marks: [mark({ revisions: [rev({ comment: null }, 'x')] })], subjects: [subject()],
     }).marks;
     const text = markPage(q);
-    assert.ok(text.trimEnd().endsWith('---'), '不该有正文，也不该编一句占位的话');
+    assert.ok(!/暂无短评|无短评/.test(text), '不编造短评占位文本');
+    assert.match(text, /原页短评 · 看过/);
   });
 
   test('**元信息原样带过去，不在这一层拆**', () => {
@@ -281,7 +282,7 @@ describe('「什么时候 → 说了什么」', () => {
     });
     const text = markPage(p.marks[0]);
     assert.match(text, /\*广播 · 想看\*/);
-    assert.match(text, /\*标记 · /);
+    assert.match(text, /\*原页短评 · /);
 
     // 没有动作的广播（纯发言）不该留一个悬着的「·」。
     const bare = project({
@@ -305,7 +306,7 @@ describe('「什么时候 → 说了什么」', () => {
     assert.ok(!/改过|编辑过|修改/.test(text), '不该断言用户改过');
   });
 
-  test('**同内容去重保留更高精度时间戳** —— 禁止低精度补零时间覆盖真实时间', () => {
+  test('相同正文的广播与原页短评分别保留各自的时间', () => {
     // 标记只到天，canonical 会把它补成 T00:00:00；广播到秒。单纯按早晚挑的话，
     // 补出来的 00:00:00 永远排在同一天的广播前面，于是留下补零的、丢掉真的——
     // 而 partial_date.precision 存在的全部意义就是防这件事。实测踩到过。
@@ -320,9 +321,10 @@ describe('「什么时候 → 说了什么」', () => {
         posted_at: { raw: '2026-07-18 12:44:56', iso: '2026-07-18T12:44:56+08:00', precision: 'second' },
       })],
     });
-    const [row] = p.marks[0].timeline.filter((r) => r.text === '同一句');
-    assert.equal(row.source, 'broadcast', '该留广播那条（秒级），不是标记那条（补零的）');
-    assert.equal(row.atRaw, '2026-07-18 12:44:56');
+    const rows = p.marks[0].timeline.filter((r) => r.text === '同一句');
+    assert.equal(rows.length, 2);
+    assert.equal(rows.find((r) => r.source === 'broadcast').atRaw, '2026-07-18 12:44:56');
+    assert.equal(rows.find((r) => r.source === 'mark').atRaw, '2026-07-18');
   });
 
   test('**同一句话去重时留最早的那条**', () => {
@@ -342,9 +344,24 @@ describe('「什么时候 → 说了什么」', () => {
     assert.equal(said[0].atRaw, '2018-08-18 19:13:23', '留下的应当是最早那条');
   });
 
-  test('**同一次标记只算一次** —— 广播给时间，标记给短评', () => {
-    // 一次「看过」会同时出现在广播里（带秒、常常没短评）和标记的修订里
-    // （有短评、只到天）。列两遍等于说他标了两次。
+  test('同日广播正文或评分不同不去重，也不覆盖原页版本', () => {
+    const p = project({
+      marks: [mark({ revisions: [rev({ comment: '原页版本' }, '2026-08-02T00:00:00+08:00')] })],
+      broadcasts: [
+        ['广播一', 4], ['广播二', 4], ['广播二', 5],
+      ].map(([text, rating], i) => withBc({ text, rating, status: 'done',
+        posted_at: { raw: `2026-08-01 12:00:0${i}`, iso: `2026-08-01T12:00:0${i}+08:00`, precision: 'second' },
+      }, { upstream_id: String(i) })),
+    });
+    const rows = p.marks[0].timeline;
+    assert.equal(rows.length, 4);
+    assert.deepEqual(rows.filter((r) => r.source === 'broadcast').map((r) => [r.text, r.rating]),
+      [['广播二', 5], ['广播二', 4], ['广播一', 4]]);
+    assert.equal(rows.find((r) => r.source === 'mark').text, '原页版本');
+  });
+
+  test('原页短评与无正文的同步广播也各自保留', () => {
+    // 两个来源是独立证据；原页短评可能是后来才加上的。
     const p = project({
       marks: [mark({ revisions: [rev({
         status: 'done', comment: '看完的感想',
@@ -357,14 +374,15 @@ describe('「什么时候 → 说了什么」', () => {
       })],
     });
     const tl = p.marks[0].timeline;
-    assert.equal(tl.length, 1, '同一天同一个状态该合成一条');
-    assert.equal(tl[0].atRaw, '2026-07-19 19:18:39', '时间取精度高的那个');
-    assert.equal(tl[0].text, '看完的感想', '短评取有的那个 —— 两样都不该丢');
+    assert.equal(tl.length, 2);
+    assert.equal(tl.find((r) => r.source === 'broadcast').text, null);
+    const onPage = tl.find((r) => r.source === 'mark');
+    assert.equal(onPage.atRaw, '2026-07-19');
+    assert.equal(onPage.text, '看完的感想');
   });
 
-  test('**时间与短评来自不同来源时要说清楚**', () => {
-    // 不说的话，「广播 · 看过」加一段短评会被读成「那条广播里写着这句话」，
-    // 而广播里其实什么都没写。
+  test('广播与原页短评分别标注来源，不拼接时间与正文', () => {
+    // 原页短评可能后来才加入，不能附在原本没有正文的广播下。
     const p = project({
       marks: [mark({ revisions: [rev({
         status: 'done', comment: '看完的感想',
@@ -374,7 +392,10 @@ describe('「什么时候 → 说了什么」', () => {
       broadcasts: [withBc({ text: null, status: 'done', action: '看过',
         posted_at: { raw: '2026-07-19 19:18:39', iso: '2026-07-19T19:18:39+08:00', precision: 'second' } })],
     });
-    assert.match(markPage(p.marks[0]), /时间来自广播，短评来自标记页/);
+    const text = markPage(p.marks[0]);
+    assert.match(text, /广播 · 看过/);
+    assert.match(text, /原页短评 · 看过/);
+    assert.ok(!text.includes('时间来自广播'));
   });
 
   test('**没有短评的状态也进时间线** —— 那是「什么时候标的」的答案', () => {
@@ -411,10 +432,60 @@ describe('「什么时候 → 说了什么」', () => {
     }
   });
 
-  test('只有当前那一条短评时，不生成这一段', () => {
-    // 正文里已经有了，再列一遍是噪音。
-    const p = project({ marks: [mark({ revisions: [rev({ comment: '只有这句' }, 'x')] })], subjects: [subject()] });
-    assert.ok(!/## 说过什么/.test(markPage(p.marks[0])));
+  test('同日编辑的每个版本共享日期标题，保留清空、恢复和改分', () => {
+    const marked_at = { raw: '2026-07-19', iso: '2026-07-19T00:00:00+08:00', precision: 'day' };
+    const versions = [
+      { comment: '第一版', rating: 4 },
+      { comment: '第二版', rating: 4 },
+      { comment: null, rating: 4 },
+      { comment: '第一版', rating: 5 },
+      { comment: '第一版', rating: null },
+    ];
+    const p = project({ marks: [mark({ revisions: versions.map((f, i) =>
+      rev({ status: 'doing', marked_at, ...f }, `2026-08-0${i + 1}T00:00:00+08:00`)) })] });
+    assert.deepEqual(p.marks[0].timeline.map((r) => [r.text, r.rating]),
+      versions.toReversed().map((f) => [f.comment, f.rating]));
+    const text = markPage(p.marks[0]).split('## 说过什么')[1];
+    assert.equal(text.match(/### 2026-07-19/g)?.length, 1);
+    assert.equal(text.match(/原页短评 · 在看/g)?.length, 5);
+    assert.match(text, /不代表各版本的编辑时间/);
+    assert.ok(text.indexOf('2026-08-05') < text.indexOf('2026-08-01'));
+  });
+
+  test('删后重标即使正文相同，也在各自的原页日期保留记录', () => {
+    const marks = ['2018-01-03', '2026-09-04'].map((date, i) => mark({
+      upstream_id: String(i),
+      revisions: [rev({ status: 'done', comment: '仍然喜欢', rating: 5,
+        marked_at: { raw: date, iso: `${date}T00:00:00+08:00`, precision: 'day' },
+      }, `${date}T12:00:00+08:00`)],
+    }));
+    for (const input of [marks, marks.toReversed()]) {
+      const p = project({ marks: input });
+      assert.equal(p.marks.length, 1);
+      assert.deepEqual(p.marks[0].timeline.map((r) => r.atRaw), ['2026-09-04', '2018-01-03']);
+      const text = markPage(p.marks[0]).split('## 说过什么')[1];
+      assert.equal(text.match(/仍然喜欢/g)?.length, 2);
+      assert.ok(text.indexOf('### 2026-09-04') < text.indexOf('### 2018-01-03'));
+    }
+  });
+
+  test('原页没有日期时，观察日期明确标注且不冒充原页日期', () => {
+    const p = project({ marks: [mark({ revisions: [rev({
+      status: 'done', comment: '旧短评', marked_at: null,
+    }, '2026-08-01T00:00:00+08:00')] })] });
+    assert.match(markPage(p.marks[0]), /### 2026-08-01（首次观察，原页日期不详）/);
+  });
+
+  test('只有一个原页短评版本时也显示来源与日期（sola）', () => {
+    const p = project({ marks: [mark({ revisions: [rev({
+      status: 'done', rating: 4, comment: '不错~',
+      marked_at: { raw: '2014-01-26', iso: '2014-01-26T00:00:00+08:00', precision: 'day' },
+    }, '2022-12-26T10:45:00+08:00')] })], subjects: [subject()] });
+    const timeline = markPage(p.marks[0]).split('## 说过什么')[1];
+    assert.match(timeline, /### 2014-01-26/);
+    assert.match(timeline, /原页短评 · 看过 · ★★★★☆/);
+    assert.ok(timeline.includes(plainText('不错~')));
+    assert.match(timeline, /首次观察：2022-12-26/);
   });
 });
 
@@ -1109,9 +1180,8 @@ describe('广播', () => {
     assert.ok(!/★|☆/.test(text), '没打分的广播不该出现星');
   });
 
-  test('**归并后评分星级完整保留** —— 确保广播与标记的评分信息不丢失', () => {
-    // 同一次「看过」会同时出现在广播（秒级、常常没短评）和标记修订（有短评、
-    // 只到天）里，归并成一条。只按被留下的那一条取值的话，星数会时有时无。
+  test('广播和原页的评分各自保留，不把后来评分挂到广播上', () => {
+    // 原页后来出现的评分不能被误读为广播发布时的评分。
     const p = project({
       marks: [mark({
         revisions: [rev({ status: 'done', rating: 5, comment: '标记页上的短评' }, '2026-08-01T00:00:00+08:00')],
@@ -1123,9 +1193,11 @@ describe('广播', () => {
       })],
     });
     const [pm] = p.marks;
-    assert.equal(pm.timeline.length, 1, '同一次标记不该列两遍');
-    assert.equal(pm.timeline[0].rating, 5, '星数记在标记那一侧，归并后要留住');
-    assert.equal(pm.timeline[0].atRaw, '2026-08-01 20:00:00', '时间要取精度高的那个');
+    assert.equal(pm.timeline.length, 2);
+    assert.equal(pm.timeline.find((r) => r.source === 'mark').rating, 5);
+    const broadcast = pm.timeline.find((r) => r.source === 'broadcast');
+    assert.equal(broadcast.rating, null);
+    assert.equal(broadcast.atRaw, '2026-08-01 20:00:00');
   });
 
   test('**「看过 X」那一行配一张作品封面** —— 与豆瓣一样', () => {
