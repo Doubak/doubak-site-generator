@@ -22,6 +22,22 @@ npm test                                                    # node --test，零�
 
 需要 Node ≥ 20。**无需执行 `npm install`** —— 运行时零外部依赖。
 
+## 测试与覆盖率
+
+与 CI 一致，使用 Node 24 运行以下命令；不需要安装 npm 依赖：
+
+```sh
+npm test
+TZ=Pacific/Kiritimati npm test  # 验证日期处理不受宿主时区影响
+node tools/smoke.mjs           # 生成页面并独立读回 front matter
+node --test --experimental-test-coverage \
+  --test-coverage-exclude='test/**' 'test/**/*.test.js'
+```
+
+覆盖率由 Node 自带工具统计，CI 在 push 时将 LCOV 上传至页首的 Coveralls 链接。统计排除测试文件，但仍包含被测试加载的命令行入口和工具文件；从未加载的文件不在分母里，不能把总百分比当作全仓库功能完整性的证明。
+
+`test/pages.test.js` 覆盖短评时间线的主要边界：单版本省略；同日同正文、状态、评分的双来源展示；内容或评分缺失时不嫁接；同日版本编号；A → B → A；清空及恢复文字；删后重标；日期缺失或仅有原始文本；旧投影没有时间线字段。测试同时验证展示合并不改写原始投影。`vendor-freshness.test.js` 检查扩展副本逐字节一致，`portable.test.js` 检查共享代码的浏览器可移植性。
+
 ## 从归档到可浏览网页
 
 ```sh

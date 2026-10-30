@@ -555,6 +555,36 @@ describe('「什么时候 → 说了什么」', () => {
     assert.equal(text.split(plainText('不错~')).length - 1, 1);
     assert.ok(!text.includes('首次观察'));
   });
+
+  test('旧投影没有 timeline 字段或为空时，页首短评仍完整可读', () => {
+    const [m] = project({ marks: [mark({ revisions: [rev({ comment: '页首短评' }, '2026-08-01')] })] }).marks;
+    for (const timeline of [undefined, []]) {
+      const text = markPage({ ...m, timeline });
+      assert.match(text, /页首短评/);
+      assert.ok(!text.includes('## 说过什么'));
+    }
+  });
+
+  test('日期显示可回退到 ISO 或原始文本，但缺少可比较日期时不合并来源', () => {
+    const marks = [mark({ revisions: [rev({
+      status: 'done', comment: '同一句', rating: 4,
+      marked_at: { raw: null, iso: '2026-07-19T00:00:00+08:00', precision: 'day' },
+    }, '2026-08-01T00:00:00+08:00')] })];
+    for (const [posted_at, heading] of [
+      [null, '日期不详'],
+      [{ raw: '2026-07-19', iso: null, precision: 'day' }, '2026-07-19'],
+    ]) {
+      const p = project({ marks, broadcasts: [withBc({
+        status: 'done', text: '同一句', rating: 4, posted_at,
+      })] });
+      const text = markPage(p.marks[0]).split('## 说过什么')[1];
+      assert.ok(text.includes(`### ${heading}`));
+      assert.match(text, /### 2026-07-19/);
+      assert.equal(text.match(/同一句/g)?.length, 2);
+      assert.ok(!text.includes('& 原页短评'));
+      assert.ok(!text.includes('2026-08-01'));
+    }
+  });
 });
 
 describe('分组', () => {
