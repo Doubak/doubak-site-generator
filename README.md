@@ -54,10 +54,17 @@ npm run site -- ~/downloads/canonical ~/downloads/exports ~/downloads/site
 
 为何第二步仍需输入 bundle：canonical 专注于结构化纯文本（方便使用 `jq` 检索，不包含二进制数据），而**图像等静态资源的原始字节存储于 bundle 归档中**，二者缺一不可。
 
-扩展可选保存的 `broadcast.item` 详情与 `broadcast.comments_snapshot` 回复首屏目前只保留在原始 bundle。
+扩展可选保存的 `broadcast.item` 详情与 `broadcast.comments_snapshot` 回复首屏正文目前只保留在原始 bundle。
 解析器不将它们生成回复实体，生成器也不把这些原始快照加入页面、搜索或旁路 JSON；
 `--include-private` 不会开启讨论展示。已有广播正文仍来自列表解析，personal topic 可以保留标题与修订。
 保存首屏不代表完整保存讨论，原始 bundle 与适合发布的站点是两种产物。
+
+有成功回复首屏捕获的广播，会在首页预览、广播列表和月份页显示 `N+ 条回复`，链接到豆瓣原页（需联网）。
+`N` 仅来自同账号、同条广播最新成功首屏的 `index.item_count`，表示抓取时已见的顶层回复下限；
+不代表当前总数，也不计入内嵌回复预览。重复捕获不相加，后续失败不抹掉已成功的首屏。
+计数未知或首屏为空时显示「回复首屏」；没有成功首屏、没有 bundle 或账号不明时不显示，不猜测为零。
+生成器只读取索引元数据，不读取回复正文、作者或 API 载荷，不把讨论放入页面、搜索或旁路文件。
+旧 canonical 无需迁移；status 与 personal topic 按各自 ID 和账号隔离匹配，原有私密过滤仍生效。
 
 **若仅需 Markdown 文本而不需构建 HTML，可运行 `npm run md`**（参数与上述一致）。产物中不包含任何 Hugo 专有配置或文件，可直接对接 Astro、Eleventy 或 Jekyll 等其他静态站点生成器 —— 详见「搭配其他静态站点生成器」。
 

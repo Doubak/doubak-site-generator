@@ -64,7 +64,7 @@ import { project, groupMarks } from '../src/projection.js';
 import {
   markPage, longformPage, doulistPage, albumPage, groupTopicPage, groupJoinsPage, markPath, longformPath, verb,
   broadcastMonthPage, broadcastMonthPath, monthOf, plainText, UNDATED,
-  markFilterPath, markFilterPage, mdTitleAttr, coverStripItem, SOURCE_LINK_TITLE,
+  markFilterPath, markFilterPage, mdTitleAttr, coverStripItem, SOURCE_LINK_TITLE, REPLY_SNAPSHOT_LINK_TITLE,
 } from '../src/markdown.js';
 
 /** 造一条 canonical 标记。 */
@@ -1104,7 +1104,7 @@ describe('广播', () => {
     assert.ok(text.includes(`"${SOURCE_LINK_TITLE}"`), '出处链接要带上 title');
     // 正文里那些链接**一个都不许带 title**，否则主题会把它们也当成出处。
     for (const m of text.matchAll(/\[[^\]]*\]\(([^)]*)\)/g)) {
-      if (m[0].includes(SOURCE_LINK_TITLE)) continue;
+      if (m[0].includes(SOURCE_LINK_TITLE) || m[0].includes(REPLY_SNAPSHOT_LINK_TITLE)) continue;
       assert.ok(!/ "/.test(m[1]), `正文链接不该带 title：${m[0]}`);
     }
   });
