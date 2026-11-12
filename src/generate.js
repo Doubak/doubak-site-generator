@@ -133,7 +133,7 @@ export function generate({
   // 不走那个脚本，而安全默认值必须处处生效——只在部署那条路上过滤，等于把
   // 「我先看看生成出来什么样」这条最常走的路留在外面。
   canonical = withoutPrivate(canonical, { includePrivate, dropNotes });
-  const p = project(canonical);
+  const p = project(canonical, { replySnapshots: imageIndex?.bundles ?? [] });
 
   if (clean) rmSync(outDir, { recursive: true, force: true });
   mkdirSync(join(outDir, 'content'), { recursive: true });
