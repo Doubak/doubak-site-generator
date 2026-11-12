@@ -17,6 +17,7 @@
   那它自己也不该需要某个 CDN 还活着才好看。字体用系统栈。
 */}}
 {{ $avatar := partialCached "avatar.html" . }}
+{{ with $avatar.icon16 }}<link rel="icon" type="image/png" sizes="16x16" href="{{ . }}">{{ end }}
 {{ with $avatar.icon }}<link rel="icon" type="image/png" sizes="32x32" href="{{ . }}">{{ end }}
 {{ with $avatar.touch }}<link rel="apple-touch-icon" sizes="180x180" href="{{ . }}">{{ end }}
 <link rel="stylesheet" href="/site.css">

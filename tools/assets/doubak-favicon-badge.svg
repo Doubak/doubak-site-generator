@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" stroke="none">
+  <title>豆备 favicon 单豆角标</title>
+  <!-- Existing Doubak bean geometry, tilt and brand colors; one bean for tiny sizes. -->
+  <rect width="16" height="16" rx="4" fill="#fff"/>
+  <rect x="1" y="1" width="14" height="14" rx="3" fill="#2E963D"/>
+  <g transform="translate(8 8) rotate(-20)">
+    <path d="M 0 -5.2 C 2.3 -5.2 4 -2.9 4 0 C 4 2.9 2.3 5.2 0 5.2 C -2.1 5.2 -3.6 3 -3.6 0.1 C -3.6 -2.8 -2.1 -5.2 0 -5.2 Z" fill="#FFF4D8"/>
+    <rect x="-2.8" y="-1.95" width="1.15" height="3.9" rx="0.575" fill="#2E963D"/>
+  </g>
+</svg>

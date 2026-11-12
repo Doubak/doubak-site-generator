@@ -6,7 +6,7 @@
   {{ if and (eq $profile.status "ok") (findRE `^assets/profile/[1-9][0-9]*/[a-f0-9]{64}\.(png|jpg|gif|webp)$` ($profile.avatar | default "")) }}
     {{ with resources.Get $profile.avatar }}
       {{ $source := .Process "png" }}
-      {{ range $name, $size := dict "icon" 32 "touch" 180 "header" 96 }}
+      {{ range $name, $size := dict "icon16" 16 "icon" 32 "touch" 180 "header" 96 }}
         {{ $image := $source }}
         {{ if or (gt $image.Width $size) (gt $image.Height $size) }}
           {{ $image = $image.Fit (printf "%dx%d png" $size $size) }}
@@ -16,6 +16,12 @@
         {{ $right := sub (sub $size $image.Width) $left }}
         {{ $bottom := sub (sub $size $image.Height) $top }}
         {{ $image = $image.Filter (images.Process "png #00000000") (images.Padding $top $right $bottom $left "#00000000") }}
+        {{ if or (eq $name "icon") (eq $name "icon16") }}
+          {{/* 原图不变；角标是主题自带的 PNG，只叠到 favicon。两个尺寸分别合成。 */}}
+          {{ $badgeSize := int (div $size 2) }}
+          {{ $badge := resources.Get (printf "branding/doubak-badge-%d.png" $badgeSize) }}
+          {{ $image = $image.Filter (images.Overlay $badge (sub $size $badgeSize) (sub $size $badgeSize)) }}
+        {{ end }}
         {{/* Root-relative input lets relativeURLs handle both file:// and subpath hosting. */}}
         {{ $local := printf "/%s" (strings.TrimPrefix $baseURL $image.Permalink) }}
         {{ $result = merge $result (dict $name $local) }}
