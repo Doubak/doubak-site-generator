@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" role="img" aria-label="豆备"><title>豆备</title>
+  <!-- Mirror of doubak-website/assets/logos/doubak-icon-small.svg (12-20px tier). -->
+  <mask id="bs" maskUnits="userSpaceOnUse" x="0" y="0" width="16" height="16">
+    <rect width="16" height="16" fill="#fff"/>
+    <path d="M 0 -5.2 C 2.3 -5.2 4 -2.9 4 0 C 4 2.9 2.3 5.2 0 5.2 C -2.1 5.2 -3.6 3 -3.6 0.1 C -3.6 -2.8 -2.1 -5.2 0 -5.2 Z" transform="translate(9.735 9.567) rotate(-20) scale(0.7968)" fill="#000" stroke="#000" stroke-width="2.51" stroke-linejoin="round"/>
+  </mask>
+  <mask id="fs" maskUnits="userSpaceOnUse" x="0" y="0" width="16" height="16">
+    <rect width="16" height="16" fill="#fff"/>
+    <rect x="-2.8" y="-1.95" width="1.15" height="3.9" rx="0.575" transform="translate(9.735 9.567) rotate(-20) scale(0.7968)" fill="#000"/>
+  </mask>
+  <rect width="16" height="16" rx="4" fill="#2E963D"/>
+  <g fill="#FFF4D8">
+    <g mask="url(#bs)"><path d="M 0 -5.2 C 2.3 -5.2 4 -2.9 4 0 C 4 2.9 2.3 5.2 0 5.2 C -2.1 5.2 -3.6 3 -3.6 0.1 C -3.6 -2.8 -2.1 -5.2 0 -5.2 Z" transform="translate(5.654 6.02) rotate(-20) scale(0.7114)"/></g>
+    <g mask="url(#fs)"><path d="M 0 -5.2 C 2.3 -5.2 4 -2.9 4 0 C 4 2.9 2.3 5.2 0 5.2 C -2.1 5.2 -3.6 3 -3.6 0.1 C -3.6 -2.8 -2.1 -5.2 0 -5.2 Z" transform="translate(9.735 9.567) rotate(-20) scale(0.7968)"/></g>
+  </g>
+</svg>
