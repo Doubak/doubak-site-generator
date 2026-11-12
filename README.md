@@ -229,7 +229,7 @@ Hugo 骨架离线生成 32×32 PNG favicon、180×180 touch icon 与 96×96 页�
 Markdown-only 消费者需自行解码；`status: ok` 表示字节与结构检查通过，不代表完成像素解码。
 所有页面图标均为本地相对链接，支持直接双击 HTML 和子目录部署。
 
-完整证据与兼容约定见[头像设计](https://github.com/Doubak/doubak-extension/blob/main/docs/designs/account-avatar-and-site-branding.md)。
+完整证据与兼容约定见[头像设计](https://github.com/Doubak/doubak-extension/blob/main/docs/designs/done/account-avatar-and-site-branding.md)。
 
 ## 发布到 GitHub Pages
 
