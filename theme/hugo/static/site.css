@@ -769,6 +769,13 @@ a[href^="http"]:not(:has(img))::after {
   border-radius: var(--r1);
   color: var(--text-dim);
 }
+.section-home p > a[title^="归档回复首屏："]:hover,
+.section-broadcast article p > a[title^="归档回复首屏："]:hover,
+.section-broadcast .entry p > a[title^="归档回复首屏："]:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+  text-decoration: none;
+}
 
 /* 「这一份掺了豆瓣上不公开的东西」。页脚里唯一一条**关于这份存档本身**的话，
    所以它不跟着别的页脚文字挤在一行，也不用 --dim ——它要读得见。

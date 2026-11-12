@@ -67,10 +67,15 @@ for(const overrides of [
     'https://m.douban.com/rexxar/api/v2/status/42/comments?start=20&count=20',
     'https://m.douban.com/rexxar/api/v2/status/42/comments?start=0&count=100',
     'https://m.douban.com/rexxar/api/v2/status/42/comments?start=0&start=20&count=20',
+    'https://m.douban.com/rexxar/api/v2/group/topic/42/comments?start=0&count=20',
+    'https://m.douban.com/rexxar/api/v2/group/topic/42/comments?start=0&count=20&nested=0',
+    'https://m.douban.com/rexxar/api/v2/group/topic/42/comments?topic_id=99&start=0&count=20&nested=1',
     'javascript:alert(1)','https://user@m.douban.com/rexxar/api/v2/status/42/comments?start=0&count=20',
   ].map(url=>({url})),
 ]) test(`ignore unsupported snapshot metadata ${JSON.stringify(overrides)}`,()=>{
+  const topic=broadcast('42','https://www.douban.com/topic/42/');
   assert.equal(Object.hasOwn(projected([row(overrides)]),'replySnapshotCount'),false);
+  assert.equal(Object.hasOwn(project({broadcasts:[topic]},{replySnapshots:bundles([row(overrides)])}).broadcasts[0],'replySnapshotCount'),false);
 });
 
 test('accounts and status/topic ID domains cannot collide; no guesses for missing identities',()=>{
