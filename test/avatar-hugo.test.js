@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { HUGO_VERSION } from '../src/hugo-bin.js';
+import { BADGE_SPECS, run as verifyBadges } from '../tools/assets/generate-badges.mjs';
 import { pngPixels } from './helpers/png-pixels.js';
 const bytes=readFileSync(new URL('./fixtures/avatar.png',import.meta.url));
 const hash=b=>createHash('sha256').update(b).digest('hex');
@@ -23,7 +24,9 @@ function assertBadge(image, original) {
  assert.equal(badge.width, badgeSize); assert.equal(badge.height, badgeSize);
  assert.ok(badge.pixels.some(([r,g,b,a]) => g > r * 1.5 && g > b * 1.5 && a === 255), 'green brand tile');
  assert.ok(badge.pixels.some(([r,g,b,a]) => r > 240 && g > 225 && b < 230 && a === 255), 'cream bean');
- assert.ok(badge.pixels.some(p=>p[3] < (badgeSize === 8 ? 32 : 1)), 'transparent badge corners');
+ const spec = BADGE_SPECS.find(s => s.size === badgeSize);
+ const corners = [[0,0],[badgeSize-1,0],[0,badgeSize-1],[badgeSize-1,badgeSize-1]].map(([cx,cy]) => badge.pixels[cy*badgeSize+cx][3]);
+ assert.ok(corners.every(a => a === corners[0] && a < spec.maxCornerAlpha), `transparent rounded badge corners (${corners})`);
  assert.ok(badge.pixels.some(p=>p[3]>0 && p[3]<255), 'antialiased alpha edge');
  assert.ok(!badge.pixels.some(([r,g,b,a])=>r>240 && g>240 && b>240 && a>0), 'no white backplate');
  for (let y=0; y<size; y++) for (let x=0; x<size; x++) {
@@ -215,5 +218,30 @@ test('real Hugo: touch icon fills the canvas, uses a smaller inset badge, and le
  const header=pngPixels(readFileSync(resolve(dir,'public',/class="account-avatar" src="([^"]+)"/.exec(html)[1])));
  assert.equal(header.pixels.filter(p=>p[3]!==0).length,128,'header still does not enlarge tiny avatars');
  assert.ok(header.pixels.every(p=>p[3]===0 || (p[0]===0 && p[1]===128 && p[2]===255)),'no badge in header');
+});
+
+test('badge PNGs match canonical two-bean geometry and keep separated bean lobes', () => {
+ assert.deepEqual(verifyBadges({ check: true }), []);
+ for (const spec of BADGE_SPECS) {
+   const badge = pngPixels(readFileSync(`theme/hugo/assets/branding/doubak-badge-${spec.size}.png`));
+   const s = badge.width;
+   assert.equal(s, spec.size);
+   assert.equal(badge.height, spec.size);
+   const at = (x, y) => badge.pixels[y * s + x];
+   const bx = Math.floor(s * 0.28), by = Math.floor(s * 0.28);
+   const fx = Math.floor(s * 0.64), fy = Math.floor(s * 0.58);
+   const back = at(bx, by);
+   const front = at(fx, fy);
+   assert.ok(back[0] > 240 && back[1] > 225 && back[3] === 255, `${s}px back bean lobe: ${back}`);
+   assert.ok(front[0] > 240 && front[1] > 225 && front[3] === 255, `${s}px front bean lobe: ${front}`);
+   // Every segment between the two bean centroids must pass through the green dividing channel.
+   let hasGreenSeparator = false;
+   for (let i = 1; i < 16; i++) {
+     const t = i / 16;
+     const [r, g, b, a] = at(Math.round(bx + t * (fx - bx)), Math.round(by + t * (fy - by)));
+     if (a === 255 && g > r && r < 160 && b < 160) hasGreenSeparator = true;
+   }
+   assert.ok(hasGreenSeparator, `${s}px badge must separate back and front beans with a green channel`);
+ }
 });
 

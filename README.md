@@ -230,7 +230,7 @@ Markdown 导出写入 `static/assets/profile/<UID>/<SHA-256>.<ext>` 和通用的
 第三方平台导出不将资料当作评分记录。
 
 Hugo 骨架离线生成 16×16／32×32 PNG favicon、180×180 touch icon 与 96×96 页眉图（显示 40 px）。
-favicon 与 touch icon 右下角叠加豆备单豆标志，外沿和圆角透明，不铺白底。
+favicon 与 touch icon 右下角叠加豆备双豆标志，外沿和圆角透明，不铺白底。
 按尺寸分别合成：16px favicon 使用 8px 角标，32px 使用 12px 角标（内缩 1px），
 180px touch icon 使用 36px 角标（内缩 12px）。大图中标志占比更小，头像保持主体。
 只在站点构建时处理，不修改归档原图、Markdown 导出或 `site-profile.json`；页眉头像不加角标。
