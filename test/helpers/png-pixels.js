@@ -43,9 +43,11 @@ export function pngPixels(bytes) {
       const bit = x * depth, index = (decoded[y * stride + (bit >> 3)] >> (8 - depth - bit % 8)) & ((1 << depth) - 1);
       pixels.push([...colors.slice(index * 3, index * 3 + 3), alpha[index] ?? 255]);
     } else {
-      assert.equal(depth, 8);
-      const pos = y * stride + x * channels;
-      pixels.push([...decoded.subarray(pos, pos + 3), type === 6 ? decoded[pos + 3] : 255]);
+      assert.ok(depth === 8 || depth === 16, `unsupported PNG depth ${depth}`);
+      const step = depth / 8;
+      const pos = y * stride + x * channels * step;
+      const sample = c => depth === 16 ? Math.round(decoded.readUInt16BE(pos + c * step) / 257) : decoded[pos + c];
+      pixels.push([sample(0), sample(1), sample(2), type === 6 ? sample(3) : 255]);
     }
   }
   return { width, height, pixels };

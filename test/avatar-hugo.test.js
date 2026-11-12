@@ -12,28 +12,29 @@ const hash=b=>createHash('sha256').update(b).digest('hex');
 const hugo=resolve(`.hugo/hugo-${HUGO_VERSION}`);
 if (process.env.CI) assert.ok(existsSync(hugo), 'CI must install pinned Hugo before running avatar tests');
 
-// Independent pixel oracle: pixels outside the lower-right quadrant must be
-// untouched; inside it, the committed badge is alpha-composited over the avatar.
+// Independent pixel oracle: only the badge rectangle may change.
+// Transparent and translucent badge pixels must blend with the avatar, not white.
 function assertBadge(image, original) {
  const size = image.width;
  assert.equal(image.height, size);
- const half = size / 2;
- const badge = pngPixels(readFileSync(`theme/hugo/assets/branding/doubak-badge-${half}.png`));
- assert.equal(badge.width, half); assert.equal(badge.height, half);
+ const [badgeSize,inset] = {16:[8,0],32:[12,1],180:[36,12]}[size];
+ const at = size-badgeSize-inset;
+ const badge = pngPixels(readFileSync(`theme/hugo/assets/branding/doubak-badge-${badgeSize}.png`));
+ assert.equal(badge.width, badgeSize); assert.equal(badge.height, badgeSize);
  assert.ok(badge.pixels.some(([r,g,b,a]) => g > r * 1.5 && g > b * 1.5 && a === 255), 'green brand tile');
  assert.ok(badge.pixels.some(([r,g,b,a]) => r > 240 && g > 225 && b < 230 && a === 255), 'cream bean');
- // The white outline must survive rasterization (some SVG renderers otherwise
- // default to a black stroke). At 8px it blends with the green tile.
- const edge = badge.pixels[half/2];
- assert.ok(edge[0] > (half === 8 ? 120 : 220) && edge[2] > (half === 8 ? 120 : 220), 'light separating outline');
+ assert.ok(badge.pixels.some(p=>p[3] < (badgeSize === 8 ? 32 : 1)), 'transparent badge corners');
+ assert.ok(badge.pixels.some(p=>p[3]>0 && p[3]<255), 'antialiased alpha edge');
+ assert.ok(!badge.pixels.some(([r,g,b,a])=>r>240 && g>240 && b>240 && a>0), 'no white backplate');
  for (let y=0; y<size; y++) for (let x=0; x<size; x++) {
    const base = original(x,y);
    const actual = image.pixels[y*size+x];
-   if (x < half || y < half) {
-     assert.deepEqual(actual, base, `untouched pixel ${size}:${x},${y}`);
+   if (x < at || y < at || x >= at+badgeSize || y >= at+badgeSize) {
+     assert.equal(actual[3],base[3], `untouched alpha ${size}:${x},${y}`);
+     if (base[3]) for(let c=0;c<3;c++) assert.ok(Math.abs(actual[c]-base[c])<=1, `untouched color ${size}:${x},${y}`);
      continue;
    }
-   const over = badge.pixels[(y-half)*half+x-half];
+   const over = badge.pixels[(y-at)*badgeSize+x-at];
    const alpha = over[3]/255 + base[3]/255 * (1-over[3]/255);
    const expected = [0,1,2].map(c => alpha ? Math.round((over[c]*over[3]/255 + base[c]*base[3]/255*(1-over[3]/255))/alpha) : 0);
    expected.push(Math.round(alpha*255));
@@ -59,7 +60,8 @@ test('real Hugo: offline local icons, exact canvas sizes, old input and corrupt-
  for(const [pattern,size] of [[/rel="icon"[^>]*sizes="16x16"[^>]*href="([^"]+)"/,16],[/rel="icon"[^>]*sizes="32x32"[^>]*href="([^"]+)"/,32],[/rel="apple-touch-icon"[^>]*href="([^"]+)"/,180],[/class="account-avatar" src="([^"]+)"/,96]]) {
    const src=pattern.exec(html)?.[1];assert.ok(src,html);assert.doesNotMatch(src,/^https?:/);
    const image=readFileSync(resolve(dir,'public',src));assert.equal(image.readUInt32BE(16),size);assert.equal(image.readUInt32BE(20),size);
-   if (size > 32) assert.equal(pngPixels(image).pixels.filter(p => p[3] !== 0).length, 16 * 8);
+   if (size === 96) assert.equal(pngPixels(image).pixels.filter(p => p[3] !== 0).length, 16 * 8);
+   else if (size === 180) assertBadge(pngPixels(image), () => [0,128,255,255]);
    else assertBadge(pngPixels(image), (x,y) => x >= (size-16)/2 && x < (size+16)/2 && y >= (size-8)/2 && y < (size+8)/2 ? [0,128,255,255] : [0,0,0,0]);
  }
  const nested=readFileSync(join(dir,'public/nested/page.html'),'utf8');assert.match(nested,/src="\.\.\/assets\/profile\//);
@@ -73,8 +75,8 @@ test('real Hugo: offline local icons, exact canvas sizes, old input and corrupt-
    assert.match(rendered,/apple-touch-icon/,`Hugo must decode ${ext}`);
    const icon = /rel="icon"[^>]*sizes="32x32"[^>]*href="([^"]+)"/.exec(rendered)[1];
    const image = pngPixels(readFileSync(resolve(dir,'public',icon)));
-   // Ignore the badged quadrant when measuring the unscaled original.
-   assert.equal(image.pixels.filter((p,i) => (i%32 < 16 || Math.floor(i/32) < 16) && p[3] !== 0).length, 96, `${ext}: transparent padding, no upscale`);
+   // Ignore the badge rectangle when measuring the unscaled original.
+   assert.equal(image.pixels.filter((p,i) => (i%32 < 19 || i%32 >=31 || Math.floor(i/32) < 19 || Math.floor(i/32) >=31) && p[3] !== 0).length, 123, `${ext}: transparent padding, no upscale`);
    assert.equal(image.pixels[0][3], 0, `${ext}: transparent corner`);
    if (ext === 'gif') assert.deepEqual(image.pixels[15 * 32 + 15], [0,128,255,255], 'GIF first frame');
  }
@@ -127,11 +129,12 @@ test('real Hugo: square avatar badges survive downscaling, cached rebuilds, badg
    assert.ok(icon.pixels.every(p=>p[3]===255));
    assert.deepEqual(icon.pixels[0],[240,240,240,255]);
    assert.deepEqual(icon.pixels[icon.width-1],[24,24,24,255]);
-   const half = icon.width/2;
-   const badge = pngPixels(readFileSync(`theme/hugo/assets/branding/doubak-badge-${half}.png`));
-   for (let y=0;y<half;y++) for (let x=2;x<half;x++) {
-     const expected = badge.pixels[y*half+x];
-     if (expected[3] === 255) assert.deepEqual(icon.pixels[(y+half)*icon.width+x+half],expected,'opaque badge pixels survive dark background');
+   const [badgeSize,inset] = icon.width===16 ? [8,0] : [12,1];
+   const at=icon.width-badgeSize-inset;
+   const badge = pngPixels(readFileSync(`theme/hugo/assets/branding/doubak-badge-${badgeSize}.png`));
+   for (let y=0;y<badgeSize;y++) for (let x=0;x<badgeSize;x++) {
+     const expected = badge.pixels[y*badgeSize+x];
+     if (expected[3] === 255) assert.deepEqual(icon.pixels[(y+at)*icon.width+x+at],expected,'opaque badge pixels survive dark background');
    }
  }
  assert.deepEqual(render('https://example.test/archive/'),first,'cached rebuild is byte-identical');
@@ -139,7 +142,7 @@ test('real Hugo: square avatar badges survive downscaling, cached rebuilds, badg
  assert.deepEqual(readFileSync(join(dir,'public',path)),square,'archived source bytes remain untouched');
  // Replace the badge in this copied theme with a visibly different local PNG.
  // An unchanged avatar must not cause Hugo to serve a stale composited icon.
- const badgePath = join(dir,'assets/branding/doubak-badge-16.png');
+ const badgePath = join(dir,'assets/branding/doubak-badge-12.png');
  const oldBadge = readFileSync(badgePath);
  writeFileSync(badgePath,square);
  const changedBadge = render('https://example.test/archive/');
@@ -156,5 +159,61 @@ test('real Hugo: square avatar badges survive downscaling, cached rebuilds, badg
    const icon=pngPixels(second[i].data), size=icon.width;
    assertBadge(icon,(x,y)=>x >= (size-16)/2 && x < (size+16)/2 && y >= (size-8)/2 && y < (size+8)/2 ? [0,128,255,255] : [0,0,0,0]);
  }
+});
+
+test('real Hugo: preserve avatar alpha and composite badge edges without a white matte', {skip:!existsSync(hugo)}, t => {
+ const dir=mkdtempSync(join(tmpdir(),'doubak-icon-alpha-'));
+ t.after(()=>rmSync(dir,{recursive:true,force:true}));
+ cpSync('theme/hugo',dir,{recursive:true});
+ mkdirSync(join(dir,'content'));
+ writeFileSync(join(dir,'content/_index.md'),'---\ntitle: Alpha\n---\n');
+ const source=readFileSync(new URL('./fixtures/avatar-alpha.png',import.meta.url));
+ const path=`assets/profile/123/${hash(source)}.png`;
+ mkdirSync(join(dir,'static/assets/profile/123'),{recursive:true});
+ writeFileSync(join(dir,'static',path),source);
+ writeFileSync(join(dir,'site-profile.json'),JSON.stringify({status:'ok',avatar:path}));
+ const result=spawnSync(hugo,['--source',dir],{encoding:'utf8'});
+ assert.equal(result.status,0,result.stdout+result.stderr);
+ const html=readFileSync(join(dir,'public/index.html'),'utf8');
+ const read=pattern=>pngPixels(readFileSync(resolve(dir,'public',pattern.exec(html)[1])));
+ const small=read(/sizes="16x16" href="([^"]+)"/);
+ const icon=read(/sizes="32x32" href="([^"]+)"/);
+ const touch=read(/rel="apple-touch-icon"[^>]*href="([^"]+)"/);
+ const header=read(/class="account-avatar" src="([^"]+)"/);
+ const original=pngPixels(source);
+ assertBadge(icon,(x,y)=>original.pixels[y*32+x]);
+ // All four opacity bands survive scaling as well as padding. Sample away from
+ // the resize seams and from the badge, including RGB below partial alpha.
+ for(const [image,xs,y] of [[small,[1,5,9,13],1],[touch,[12,67,112,167],20],[header,[34,42,50,58],36]]) {
+   for(let i=0;i<4;i++) {
+     const pixel=image.pixels[y*image.width+xs[i]], alpha=[0,64,128,255][i];
+     assert.ok(Math.abs(pixel[3]-alpha)<=1,`alpha ${image.width}, band ${i}: ${pixel}`);
+     if(alpha) for(let c=0;c<3;c++) assert.ok(Math.abs(pixel[c]-[40,120,200][c])<=2,`no matte in ${image.width}: ${pixel}`);
+   }
+ }
+ assert.deepEqual(readFileSync(join(dir,'public',path)),source,'original RGBA bytes unchanged');
+});
+
+test('real Hugo: touch icon fills the canvas, uses a smaller inset badge, and leaves header unbadged', {skip:!existsSync(hugo)}, t => {
+ const dir=mkdtempSync(join(tmpdir(),'doubak-touch-fill-'));
+ t.after(()=>rmSync(dir,{recursive:true,force:true}));
+ cpSync('theme/hugo',dir,{recursive:true});mkdirSync(join(dir,'content'));
+ writeFileSync(join(dir,'content/_index.md'),'---\ntitle: Touch\n---\n');
+ // A small opaque source previously acquired transparent padding on all sides.
+ const path=`assets/profile/123/${hash(bytes)}.png`;
+ mkdirSync(join(dir,'static/assets/profile/123'),{recursive:true});writeFileSync(join(dir,'static',path),bytes);
+ writeFileSync(join(dir,'site-profile.json'),JSON.stringify({status:'ok',avatar:path}));
+ const result=spawnSync(hugo,['--source',dir],{encoding:'utf8'});
+ assert.equal(result.status,0,result.stdout+result.stderr);
+ const html=readFileSync(join(dir,'public/index.html'),'utf8');
+ const touch=pngPixels(readFileSync(resolve(dir,'public',/rel="apple-touch-icon"[^>]*href="([^"]+)"/.exec(html)[1])));
+ assert.equal(touch.width,180);assert.equal(touch.height,180);
+ assert.ok(touch.pixels.every(p=>p[3]===255),'no added transparent/white outer border');
+ assertBadge(touch,()=>[0,128,255,255]);
+ const badge=pngPixels(readFileSync('theme/hugo/assets/branding/doubak-badge-36.png'));
+ assert.equal(badge.width/touch.width,.2,'large-icon badge occupies 20% of the width, not 50%');
+ const header=pngPixels(readFileSync(resolve(dir,'public',/class="account-avatar" src="([^"]+)"/.exec(html)[1])));
+ assert.equal(header.pixels.filter(p=>p[3]!==0).length,128,'header still does not enlarge tiny avatars');
+ assert.ok(header.pixels.every(p=>p[3]===0 || (p[0]===0 && p[1]===128 && p[2]===255)),'no badge in header');
 });
 
