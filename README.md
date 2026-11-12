@@ -223,10 +223,15 @@ Markdown 导出写入 `static/assets/profile/<UID>/<SHA-256>.<ext>` 和通用的
 第三方平台导出不将资料当作评分记录。
 
 Hugo 骨架离线生成 16×16／32×32 PNG favicon、180×180 touch icon 与 96×96 页眉图（显示 40 px）。
-favicon 右下角叠加带白边的豆备单豆标志；两种尺寸分别合成，角标占右下四分之一区域。
-只在站点构建时处理，不修改归档原图、Markdown 导出或 `site-profile.json`，touch icon 与页眉头像不加角标。
+favicon 与 touch icon 右下角叠加豆备单豆标志，外沿和圆角透明，不铺白底。
+按尺寸分别合成：16px favicon 使用 8px 角标，32px 使用 12px 角标（内缩 1px），
+180px touch icon 使用 36px 角标（内缩 12px）。大图中标志占比更小，头像保持主体。
+只在站点构建时处理，不修改归档原图、Markdown 导出或 `site-profile.json`；页眉头像不加角标。
 使用 Hugo 原生图片处理和主题内置 PNG，不增加运行时依赖或远端请求；素材与再生成方法见[角标说明](tools/assets/README.md)。
-等比缩小、透明补边、不放大小图，GIF 使用首帧；支持 JPEG / PNG / GIF / WebP，拒绝 SVG。
+favicon 与页眉图等比缩小、透明补边、不放大小图；touch icon 则等比缩放并居中裁切至 180×180，
+允许放大小图，避免在头像四周添加一圈空白。两者都保留原图透明度，GIF 使用首帧；支持 JPEG / PNG / GIF / WebP，拒绝 SVG。
+半透明角标按 alpha 合成，让下方头像透出；不把透明区域替换成白色。
+JPEG 本身不含 alpha，铺满画布的 JPEG 合成结果仍不透明；图片查看器或系统可能另给透明 PNG 添加背景。
 写出原图前核对 SHA-256、MIME、文件头 / 容器与尺寸上限（5 MiB、每边 4096、总计 16M 像素）；
 完整像素解码在 Hugo 构建时执行，失败会警告并降级为文字，不生成损坏的图标标签。
 无头像时仍保留文字站名和原有绿色方块页眉标记，不单独生成头像 favicon。
