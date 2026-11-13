@@ -86,9 +86,10 @@ test('real Hugo: both permalink layouts, no dead links, 86 escaped members, no r
   const c=canonical();c.subjects[0].revisions=[revision(1,{title:'A',series:series([item('2'),...Array.from({length:85},(_,i)=>item(String(i+100),'很长的系列名称'.repeat(20)+'[x]_<img src="https://bad.example/x">'))])})];
   for (const [path,text] of buildPages(project(c)).files) {mkdirSync(dirname(join(dir,path)),{recursive:true});writeFileSync(join(dir,path),text);}
   const original=readFileSync(join(dir,'hugo.toml'),'utf8');
-  for (const ugly of [true,false]) {
+  for (const baseURL of ['https://example.test/', 'https://example.test/archive/']) for (const ugly of [true,false]) {
     writeFileSync(join(dir,'hugo.toml'),original.replace('uglyURLs = true',`uglyURLs = ${ugly}`));
-    const r=spawnSync(hugo,['--source',dir,'--baseURL','https://example.test/archive/'],{encoding:'utf8'});assert.equal(r.status,0,r.stdout+r.stderr);
+    rmSync(join(dir,'public'),{recursive:true,force:true});
+    const r=spawnSync(hugo,['--source',dir,'--baseURL',baseURL],{encoding:'utf8'});assert.equal(r.status,0,r.stdout+r.stderr);
     const root=join(dir,'public'), path=join(root,ugly?'movie/1.html':'movie/1/index.html');
     const html=readFileSync(path,'utf8');assert.match(html,ugly?/href="\.\.\/movie\/2.html"/:/href="\.\.\/\.\.\/movie\/2\/"/);
     assert.match(html,/本次记录含 86 个条目/);assert.doesNotMatch(html,/<img[^>]+bad\.example/);
