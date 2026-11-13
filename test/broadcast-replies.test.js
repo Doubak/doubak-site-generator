@@ -11,9 +11,9 @@ import { generate } from '../src/generate.js';
 import { HUGO_VERSION } from '../src/hugo-bin.js';
 
 const account = { user_id: '123' };
-const broadcast = (id='42', url=`https://www.douban.com/people/123/status/${id}/`) => ({
+const broadcast = (id='42', url=`https://www.douban.com/people/123/status/${id}/`, over={}) => ({
   account, upstream_id:id, url,
-  revisions:[{fields:{text:'My broadcast',visibility:'public',posted_at:{iso:'2026-11-11T10:00:00Z',raw:'2026-11-11 18:00:00'}}}],
+  revisions:[{fields:{text:'My broadcast',visibility:'public',posted_at:{iso:'2026-11-11T10:00:00Z',raw:'2026-11-11 18:00:00'},...over}}],
 });
 const row = (overrides={}) => ({
   capture_id:'bundle#000001',intent:'broadcast.comments_snapshot',route_key:'broadcast.comments_snapshot',
@@ -23,8 +23,8 @@ const row = (overrides={}) => ({
 const bundles = rows => [{account,rows}];
 const projected = rows => project({broadcasts:[broadcast()]},{replySnapshots:bundles(rows)}).broadcasts[0];
 
-test('successful first page shows a lower bound and Douban link; no replies enter pages or search',()=>{
-  const data={broadcasts:[broadcast()]};
+test('successful first page shows a lower bound at bottom of broadcast; no replies enter pages or search',()=>{
+  const data={broadcasts:[broadcast('42',undefined,{images:['https://img1.doubanio.com/pic.jpg']})]};
   const input=structuredClone(data);
   const r=row();Object.defineProperty(r,'payload',{get(){throw Error('must not read reply bodies');}});
   const p=project(data,{replySnapshots:bundles([r])});
@@ -32,10 +32,23 @@ test('successful first page shows a lower bound and Douban link; no replies ente
   assert.match(block,/\[2\+ 条回复\]\(https:\/\/www\.douban\.com\/people\/123\/status\/42\//);
   assert.match(block,/抓取时的顶层回复下限，不代表完整讨论/);
   assert.ok(block.startsWith('### 2026-11-11 18:00:00\n'),'stable timestamp anchor');
+  // Bottom placement: source link first, then body & images, then reply button at the very end.
+  const srcAt=block.indexOf('[豆瓣原页]');
+  const textAt=block.indexOf('My broadcast');
+  const imgAt=block.indexOf('[![](https://img1.doubanio.com/pic.jpg)]');
+  const replyAt=block.indexOf('[2+ 条回复]');
+  assert.ok(srcAt>0&&srcAt<textAt&&textAt<imgAt&&imgAt<replyAt,block);
+  assert.ok(block.trimEnd().endsWith('")'));
+  const css=readFileSync(resolve('theme/hugo/static/site.css'),'utf8');
+  const rule=/p:has\(> a\[title\^="归档回复首屏："\]\)\s*\{([^}]*)\}/.exec(css)?.[1]??'';
+  assert.match(rule,/clear:\s*both/,'reply badge must clear floated subject covers');
   const built=buildPages(p), plain=buildPages(project(data));
-  for(const name of ['content/_index.md','content/broadcast/2026-11.md']) {
-    assert.match(new Map(built.files).get(name),/2\+ 条回复/);
+  const files=new Map(built.files);
+  for(const name of ['content/_index.md','content/broadcast/2026-11.md','content/broadcast/replied/2026-11.md']) {
+    assert.match(files.get(name),/2\+ 条回复/);
   }
+  assert.match(files.get('content/broadcast/replied/_index.md'),/douban_kind:\s*broadcast-filter/);
+  assert.match(files.get('content/broadcast/replied/_index.md'),/douban_count:\s*1/);
   assert.deepEqual(built.search,plain.search,'counts do not become searchable discussion content');
   assert.deepEqual(data,input,'canonical unchanged');
   assert.deepEqual(project(data),project(data,{replySnapshots:[]}),'old inputs unchanged');
@@ -119,4 +132,72 @@ test('Node generator and real Hugo show the badge on home, broadcast list and mo
   const hidden=broadcast();hidden.revisions[0].fields.visibility='private';
   run({broadcasts:[hidden]});assert.doesNotMatch(readFileSync(join(out,'content/_index.md'),'utf8'),/条回复|回复首屏/);
   run(canonical,{bundlesDir:null});assert.doesNotMatch(readFileSync(join(out,'content/broadcast/2026-11.md'),'utf8'),/条回复|回复首屏/);
+  assert.equal(existsSync(join(out,'content/broadcast/replied/_index.md')),false);
+  const r0=spawnSync(hugo,['--source',out],{encoding:'utf8'});assert.equal(r0.status,0,r0.stdout+r0.stderr);
+  assert.doesNotMatch(readFileSync(join(out,'public/broadcast/index.html'),'utf8'),/class="chips"/);
+});
+
+test('real Hugo: broadcast filter chips (全部 / 有回复) work across pagination, subpath and empty-0 snapshots', {skip:!existsSync(hugo)}, t=>{
+  const dir=mkdtempSync(join(tmpdir(),'doubak-reply-chips-'));
+  t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  const months=Array.from({length:14},(_,i)=>i<2?`2026-0${2-i}`:`2025-${String(14-i).padStart(2,'0')}`);
+  const broadcasts=[], rows=[];
+  for(let i=0;i<months.length;i++) {
+    const id=String(100+i);
+    broadcasts.push(broadcast(id,undefined,{
+      text:`Post ${id}`,
+      target_id:i===0?'999':null,
+      action:i===0?'想看':null,
+      posted_at:{iso:`${months[i]}-15T10:00:00Z`,raw:`${months[i]}-15 18:00:00`},
+    }));
+    // Make 13 replied broadcasts (> 12 months per page -> 2 pages in replied/) and 1 explicit 0-count snapshot.
+    if(i<13) rows.push(row({capture_id:`b#${id}`,item_count:i+1,url:`https://m.douban.com/rexxar/api/v2/status/${id}/comments?start=0&count=20`}));
+    else rows.push(row({capture_id:`b#${id}`,item_count:0,url:`https://m.douban.com/rexxar/api/v2/status/${id}/comments?start=0&count=20`}));
+  }
+  const canonical={
+    broadcasts,
+    marks:[{canonical_version:'canonical/1.0',identity_layer:'upstream_id',upstream_id:'m1',account,medium:'movie',
+      subject:{id:'999',url:'https://movie.douban.com/subject/999/'},
+      revisions:[{fields:{status:'wish',marked_at:{iso:'2026-02-01T00:00:00Z',raw:'2026-02-01'}}}]}],
+    subjects:[{medium:'movie',id:'999',revisions:[{fields:{title:'Series Test Movie'}}]}],
+  };
+  const root=join(dir,'bundles'), bdir=join(root,'b1');mkdirSync(bdir,{recursive:true});
+  writeFileSync(join(bdir,'manifest.json'),JSON.stringify({account}));
+  writeFileSync(join(bdir,'index-bundle.ndjson'),rows.map(r=>JSON.stringify(r)).join('\n')+'\n');
+  const out=join(dir,'site');
+  const st=generate({canonical,bundlesDir:root,outDir:out,themeDir:resolve('theme/hugo')});
+  assert.equal(st.broadcasts,14);
+  assert.equal(st.broadcastMonths,14);
+
+  for(const baseURL of ['/','https://example.test/archive/']) {
+    const pub=join(out,'public');rmSync(pub,{recursive:true,force:true});
+    const r=spawnSync(hugo,['--source',out,'--baseURL',baseURL],{encoding:'utf8'});
+    assert.equal(r.status,0,r.stdout+r.stderr);
+    const home=readFileSync(join(pub,'index.html'),'utf8');
+    assert.match(home,/>广播<\/a> <b>14<\/b>/,'browse count excludes replied subsection');
+    for(const p of ['broadcast/index.html','broadcast/page/2/index.html']) {
+      const html=readFileSync(join(pub,p),'utf8');
+      assert.match(html,/共 <b>14<\/b> 个月/);
+      assert.match(html,/<b>14<\/b> 条广播/);
+      assert.match(html,/class="chip chip-on"[^>]*>全部\s*<b>14<\/b><\/a>/);
+      assert.match(html,/class="chip"[^>]*>有回复\s*<b>13<\/b><\/a>/);
+    }
+    const r1=readFileSync(join(pub,'broadcast/replied/index.html'),'utf8');
+    const r2=readFileSync(join(pub,'broadcast/replied/page/2/index.html'),'utf8');
+    for(const html of [r1,r2]) {
+      assert.match(html,/<h1>广播 · 有回复<\/h1>/);
+      assert.match(html,/共 <b>13<\/b> 个月/);
+      assert.match(html,/<b>13<\/b> 条广播/);
+      assert.match(html,/class="chip"[^>]*>全部\s*<b>14<\/b><\/a>/);
+      assert.match(html,/class="chip chip-on"[^>]*>有回复\s*<b>13<\/b><\/a>/);
+    }
+    assert.match(r1,/href="(?:\.\.\/)+movie\/999\.html"/);
+    assert.match(r1,/href="(?:\.\.\/)+broadcast\/index\.html"/);
+    assert.match(r2,/Post 112/);
+    assert.doesNotMatch(r1+r2,/Post 113|>回复首屏</,'0-count snapshot excluded from 有回复');
+    const rm=readFileSync(join(pub,'broadcast/replied/2026-02.html'),'utf8');
+    assert.match(rm,/<h1>有回复 · 2026年2月<\/h1>/);
+    assert.match(rm,/href="\.\.\/\.\.\/movie\/999\.html"/);
+    assert.ok(rm.indexOf('Series Test Movie')<rm.indexOf('1+ 条回复'));
+  }
 });

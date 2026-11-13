@@ -64,6 +64,7 @@ import { project, groupMarks } from '../src/projection.js';
 import {
   markPage, longformPage, doulistPage, albumPage, groupTopicPage, groupJoinsPage, markPath, longformPath, verb,
   broadcastMonthPage, broadcastMonthPath, monthOf, plainText, UNDATED,
+  broadcastFilterPath, broadcastFilterPage,
   markFilterPath, markFilterPage, mdTitleAttr, coverStripItem, SOURCE_LINK_TITLE, REPLY_SNAPSHOT_LINK_TITLE,
 } from '../src/markdown.js';
 
@@ -1443,7 +1444,8 @@ describe('Hugo 骨架', () => {
     for (const f of ['hugo.toml', 'layouts/index.html', 'static/site.css',
       'layouts/_default/baseof.html', 'layouts/_default/list.html',
       'layouts/_default/single.html', 'layouts/partials/stars.html',
-      'layouts/partials/pager.html', 'layouts/partials/statuschips.html']) {
+      'layouts/partials/pager.html', 'layouts/partials/statuschips.html',
+      'layouts/partials/broadcastchips.html']) {
       assert.ok(existsSync(join(THEME, f)), `骨架缺 ${f}`);
     }
   });
@@ -1649,6 +1651,9 @@ describe('Hugo 骨架', () => {
     const chips = readFileSync(join(THEME, 'layouts/partials/statuschips.html'), 'utf-8');
     assert.match(chips, /\.Params\.douban_count/);
     assert.ok(!/len \$paginator/.test(chips));
+    const bchips = readFileSync(join(THEME, 'layouts/partials/broadcastchips.html'), 'utf-8');
+    assert.match(bchips, /\.Params\.douban_count/);
+    assert.ok(!/len \$paginator/.test(bchips));
   });
 
   test('**样式在 site.css，不内联在模板里**', async () => {
@@ -1871,6 +1876,7 @@ describe('Hugo 骨架', () => {
       ...broadcastMonthPage('2021-11', [{
         postedAtRaw: '2021-11-02 10:00:00', text: 'x', images: [], action: null, target: null,
       }]).matchAll(/^(douban_\w+):/gm),
+      ...broadcastFilterPage('replied', '有回复', 1).matchAll(/^(douban_\w+):/gm),
       // 字段要给全（哪怕是 null）。`undefined` 是**故意**不写出来的，
       // 所以一个偷懒的 fixture 会让这条测试去告生成器的状。
       ...longformPage({ kind: 'note', id: '1', url: null, title: 't', body: 'b',

@@ -13,16 +13,19 @@
 */}}
 
 {{ $isFilter := eq .Params.douban_kind "mark-filter" }}
-{{/* 筛选页挂在媒介那一节底下，所以「这是哪个媒介」要看父节。 */}}
-{{ $section := cond $isFilter .Parent . }}
+{{- $isBroadcastFilter := eq .Params.douban_kind "broadcast-filter" }}
+{{/* 筛选页挂在对应小节底下，所以「这是哪个栏目」要看父节。 */}}
+{{ $section := cond (or $isFilter $isBroadcastFilter) .Parent . }}
 {{ $isMedia := in (slice "movie" "book" "music" "game" "drama") $section.Section }}
-{{ $isBroadcast := eq .Section "broadcast" }}
+{{ $isBroadcast := eq $section.Section "broadcast" }}
 {{/* Hugo 会把 [params] 里的键全部转成小写，所以是 mediumnames 而不是 mediumNames。 */}}
 {{ $names := .Site.Params.mediumnames }}
 {{ $mediumName := index $names $section.Section | default $section.Title }}
 
 {{ if and $isMedia $isFilter }}
   <h1>{{ $mediumName }} · {{ .Params.douban_verb }}</h1>
+{{ else if and $isBroadcast $isBroadcastFilter }}
+  <h1>{{ $mediumName }} · {{ .Title }}</h1>
 {{ else if eq .Kind "term" }}
   {{/* 标签页。标题要稳定，不能用 Hugo 自己取的那个——见 partials/termname.html。 */}}
   <h1>{{ partial "termname.html" . }}</h1>
@@ -70,17 +73,23 @@
   {{/*
     广播是一条可以一直翻下去的时间线，不是「152 个月份的目录」——目录要点两次
     才看得到一条广播，而广播恰恰是这份档案里最该被读到的东西。
+    用 .RegularPages 而非 .Pages，避免把 broadcast/replied/ 筛选子小节算作月份。
   */}}
+  {{ $allTotal := 0 }}
+  {{ range $section.RegularPages }}{{ $allTotal = add $allTotal (.Params.douban_count | default 0) }}{{ end }}
+  {{ $pages := .RegularPages }}
   {{ $n := 0 }}{{ $t := 0 }}
-  {{ range .Pages }}{{ $n = add $n (.Params.douban_count | default 0) }}{{ $t = add $t (.Params.douban_with_text | default 0) }}{{ end }}
+  {{ range $pages }}{{ $n = add $n (.Params.douban_count | default 0) }}{{ $t = add $t (.Params.douban_with_text | default 0) }}{{ end }}
+  {{ partial "broadcastchips.html" (dict "section" $section "current" (cond $isBroadcastFilter .Params.douban_filter "") "total" $allTotal) }}
   <div class="summary">
-    <span>共 <b>{{ len .Pages }}</b> 个月</span>
+    <span>共 <b>{{ len $pages }}</b> 个月</span>
     <span><b>{{ $n }}</b> 条广播</span>
     <span>其中 <b>{{ $t }}</b> 条带正文</span>
   </div>
   <blockquote>广播发布后不可编辑，所以每条都是那一刻的原话。</blockquote>
 
-  {{ $paginator := .Paginate .Pages.ByDate.Reverse 4 }}
+  {{ $pageSize := cond $isBroadcastFilter 12 4 }}
+  {{ $paginator := .Paginate $pages.ByDate.Reverse $pageSize }}
   {{ range $paginator.Pages }}
     <section class="entry">
       <h2><a href="{{ partial "local-url.html" .RelPermalink }}">{{ .Title }}</a>

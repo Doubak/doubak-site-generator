@@ -39,7 +39,7 @@
 
 {{ else if eq .Params.douban_kind "broadcast_month" }}
   {{/* ── 某个月的广播 ─────────────────────────────────────────── */}}
-  <h1>{{ .Title }}</h1>
+  <h1>{{ if eq .Params.douban_filter "replied" }}有回复 · {{ end }}{{ .Title }}</h1>
   <div class="summary">
     <span><b>{{ .Params.douban_count }}</b> 条</span>
     <span>其中 <b>{{ .Params.douban_with_text }}</b> 条带正文</span>
