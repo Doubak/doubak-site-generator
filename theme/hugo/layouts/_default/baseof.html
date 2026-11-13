@@ -37,15 +37,15 @@
     链接（那些页面各自有自己的 h1）。看上去一模一样，样式在 `.home` 上，不在标签上。
   */}}
   {{ if .IsHome }}
-    <h1 class="home{{ if $avatar.header }} has-avatar{{ end }}"><a href="{{ .Site.Home.RelPermalink }}">{{ with $avatar.header }}<img class="account-avatar" src="{{ . }}" width="40" height="40" alt="">{{ end }}{{ .Site.Title }}</a></h1>
+    <h1 class="home{{ if $avatar.header }} has-avatar{{ end }}"><a href="{{ partial "local-url.html" .Site.Home.RelPermalink }}">{{ with $avatar.header }}<img class="account-avatar" src="{{ . }}" width="40" height="40" alt="">{{ end }}{{ .Site.Title }}</a></h1>
   {{ else }}
-    <a class="home{{ if $avatar.header }} has-avatar{{ end }}" href="{{ .Site.Home.RelPermalink }}">{{ with $avatar.header }}<img class="account-avatar" src="{{ . }}" width="40" height="40" alt="">{{ end }}{{ .Site.Title }}</a>
+    <a class="home{{ if $avatar.header }} has-avatar{{ end }}" href="{{ partial "local-url.html" .Site.Home.RelPermalink }}">{{ with $avatar.header }}<img class="account-avatar" src="{{ . }}" width="40" height="40" alt="">{{ end }}{{ .Site.Title }}</a>
   {{ end }}
   <nav>
     {{ range partial "sections.html" . }}
-      <a href="{{ .RelPermalink }}"{{ if eq $.Section .Section }} aria-current="page"{{ end }}>{{ index $names .Section | default .Title }}</a>
+      <a href="{{ partial "local-url.html" .RelPermalink }}"{{ if eq $.Section .Section }} aria-current="page"{{ end }}>{{ index $names .Section | default .Title }}</a>
     {{ end }}
-    {{ with .Site.GetPage "/search" }}<a href="{{ .RelPermalink }}">搜索</a>{{ end }}
+    {{ with .Site.GetPage "/search" }}<a href="{{ partial "local-url.html" .RelPermalink }}">搜索</a>{{ end }}
   </nav>
 </div></header>
 

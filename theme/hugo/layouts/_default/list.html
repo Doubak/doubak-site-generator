@@ -46,7 +46,7 @@
   <ul class="grid">
     {{ range $paginator.Pages }}
       <li>
-        <a href="{{ .RelPermalink }}">
+        <a href="{{ partial "local-url.html" .RelPermalink }}">
           <div class="shot">
             {{ with .Params.douban_cover }}
               <img src="{{ . }}" alt="" loading="lazy">
@@ -83,7 +83,7 @@
   {{ $paginator := .Paginate .Pages.ByDate.Reverse 4 }}
   {{ range $paginator.Pages }}
     <section class="entry">
-      <h2><a href="{{ .RelPermalink }}">{{ .Title }}</a>
+      <h2><a href="{{ partial "local-url.html" .RelPermalink }}">{{ .Title }}</a>
         <span class="chip chip-plain">{{ .Params.douban_count }} 条</span></h2>
       {{ .Content }}
     </section>
@@ -96,7 +96,7 @@
   <ul class="album-grid">
     {{ range $paginator.Pages }}
       <li class="album-card">
-        <a class="album-cover-link" href="{{ .RelPermalink }}">
+        <a class="album-cover-link" href="{{ partial "local-url.html" .RelPermalink }}">
           <div class="album-shot">
             {{ with .Params.douban_cover }}
               <img src="{{ . }}" alt="{{ $.Title }}" loading="lazy">
@@ -107,7 +107,7 @@
         </a>
         <div class="album-body">
           <div class="album-title">
-            <a href="{{ .RelPermalink }}">{{ .Title }}</a>
+            <a href="{{ partial "local-url.html" .RelPermalink }}">{{ .Title }}</a>
             {{ if .Params.douban_private }}<span class="lock" title="私密相册：在豆瓣上只有你自己看得见">🔒</span>{{ end }}
           </div>
           <div class="meta-line">
@@ -137,7 +137,7 @@
     <ul class="plainlist">
       {{ range $paginator.Pages }}
         <li class="entry">
-          <a href="{{ .RelPermalink }}"><b>{{ .Title }}</b></a>
+          <a href="{{ partial "local-url.html" .RelPermalink }}"><b>{{ .Title }}</b></a>
           <div class="meta-line">
             {{ with .Params.douban_published_at_raw }}{{ . }}{{ end }}
             {{ with .Params.douban_group_name }} · {{ . }}{{ end }}
@@ -156,7 +156,7 @@
       <li class="entry">
         {{/* 标签总目里列的是一个个标签页，它们的名字同样要稳定——`.Title` 是
              Hugo 自己取的那个，会随遍历顺序在 `Xbox` 与 `XBOX` 之间跳。 */}}
-        <a href="{{ .RelPermalink }}"><b>{{ if eq .Kind "term" }}{{ partial "termname.html" . }}{{ else }}{{ .Title }}{{ end }}</b></a>
+        <a href="{{ partial "local-url.html" .RelPermalink }}"><b>{{ if eq .Kind "term" }}{{ partial "termname.html" . }}{{ else }}{{ .Title }}{{ end }}</b></a>
         {{/* 私密豆列在**目录页上也要看得见**。只在点进去才说，等于目录页把一份
              私密的和一份公开的画成一模一样——而这份站点是可以发布出去的，目录页
              又恰恰是别人扫一眼的地方。`douban_private` 在 unknown 时也是 true。 */}}

@@ -15,9 +15,9 @@
 */}}
 <nav class="summary browse" aria-label="浏览">
   {{ range partial "sections.html" . }}
-    <span><a href="{{ .RelPermalink }}">{{ index $names .Section | default .Title }}</a> <b>{{ len .RegularPages }}</b></span>
+    <span><a href="{{ partial "local-url.html" .RelPermalink }}">{{ index $names .Section | default .Title }}</a> <b>{{ len .RegularPages }}</b></span>
   {{ end }}
-  {{ with .Site.GetPage "/search" }}<span><a href="{{ .RelPermalink }}">搜索</a></span>{{ end }}
+  {{ with .Site.GetPage "/search" }}<span><a href="{{ partial "local-url.html" .RelPermalink }}">搜索</a></span>{{ end }}
 </nav>
 
 {{/*
