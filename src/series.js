@@ -61,7 +61,7 @@ export function projectSeries(subject) {
       const before=new Map(prior.value.items.map(i=>[keyOf(i),i]));
       const after=new Map(event.value.items.map(i=>[keyOf(i),i]));
       history.push({ at:event.at, parserChanged:prior.parser!==event.parser,
-        conflict:time(prior.at)===time(event.at),
+        conflict:time(prior.at)===time(event.at), partial:event.value.scope==='partial',
         added:event.value.items.filter(i=>!before.has(keyOf(i))),
         removed:prior.value.items.filter(i=>!after.has(keyOf(i))),
         changed:!event.value.items.some(i=>!before.has(keyOf(i))) && !prior.value.items.some(i=>!after.has(keyOf(i))) });

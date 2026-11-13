@@ -1015,7 +1015,7 @@ function seriesSection(s) {
     for (const h of s.history) {
       const message=h.conflict?'同一时间有不同列表记录':h.parserChanged?'解析版本不同，不推断平台列表变化':[
         h.added.length?`本次多显示：${h.added.map(name).join('、')}`:null,
-        h.removed.length?`该来源本次未列出：${h.removed.map(name).join('、')}`:null,
+        h.removed.length?`${h.partial?'本次可读取部分未列出':'该来源本次未列出'}：${h.removed.map(name).join('、')}`:null,
         h.changed?'顺序 / 名称 / 范围变更':null,
       ].filter(Boolean).join('；');
       lines.push(`- ${date(h.at)}：${message}。`);

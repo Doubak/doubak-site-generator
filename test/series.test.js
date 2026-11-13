@@ -103,3 +103,11 @@ test('real Hugo: both permalink layouts, no dead links, 86 escaped members, no r
     }
   }
 });
+
+
+test('partially parsed snapshot does not claim unreadable members disappeared from the source',()=>{
+  const c=canonical();c.subjects[0].revisions=[revision(1,{series:series([item('2'),item('3')])}),
+    revision(2,{series:{...series([item('3')]),scope:'partial'}})];
+  const md=page(c,'1');assert.match(md,/本次可读取部分未列出：Name 2/);
+  assert.doesNotMatch(md,/该来源本次未列出：Name 2|退出系列/);
+});
