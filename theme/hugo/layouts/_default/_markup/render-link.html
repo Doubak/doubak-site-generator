@@ -1,19 +1,13 @@
-{{- /* Resolve Markdown page links relative to the output file, independent of baseURL.
-      Hugo's embedded hook + relativeURLs retains the base path twice on subpath deployments. */ -}}
+{{- /* Resolve Markdown page links for both file:// and subpath baseURLs.
+      Stripping baseURL and emitting a site-root path lets Hugo's relativeURLs
+      relativize from each rendered output file (including paginated list views). */ -}}
 {{- $href := .Destination -}}
 {{- $url := urls.Parse .Destination -}}
 {{- if and (not $url.IsAbs) (strings.HasSuffix $url.Path ".md") -}}
   {{- with .Page.GetPage $url.Path -}}
-    {{- $base := (urls.Parse site.BaseURL).Path -}}
-    {{- $target := strings.TrimPrefix $base .RelPermalink -}}
-    {{- $source := strings.TrimPrefix $base $.Page.RelPermalink -}}
-    {{- if strings.HasSuffix $source "/" -}}{{- $source = printf "%sindex.html" $source -}}{{- end -}}
-    {{- $dir := path.Dir $source -}}
-    {{- $prefix := "" -}}
-    {{- if ne $dir "." -}}{{- range split $dir "/" -}}{{- $prefix = printf "../%s" $prefix -}}{{- end -}}{{- end -}}
-    {{- $href = printf "%s%s" $prefix $target -}}
+    {{- $href = partial "local-url.html" .RelPermalink -}}
     {{- with $url.RawQuery -}}{{- $href = printf "%s?%s" $href . -}}{{- end -}}
     {{- with $url.Fragment -}}{{- $href = printf "%s#%s" $href . -}}{{- end -}}
   {{- end -}}
 {{- end -}}
-<a href="{{ $href | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }}>{{ .Text | safeHTML }}</a>
+<a href="{{ $href | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }}>{{ .Text | safeHTML }}</a>{{- "" -}}

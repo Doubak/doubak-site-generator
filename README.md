@@ -169,16 +169,24 @@ npm 社区中的 `hugo-bin` 等封装包本质上也是下载官方二进制，�
 ## 浏览器扩展中的同构支持
 
 在无需安装 Node 环境的情况下，豆备浏览器扩展的「导出」页面可直接导出完全相同的 Markdown 结构树（包含完整的本地图片）。
-底层复用了本项目完全相同的核心模块：`pages.js`、`projection.js`、`markdown.js`、`search.js`、
-`yaml.js`、`site-title.js`、`image-index.js`、`avatar.js` 及 `avatar-image.js` 逐字节同步至扩展的 `src/vendor/site-generator/` 目录，
+底层复用了本项目完全相同的核心模块：`yaml.js`、`private.js`、`projection.js`、`series.js`、`markdown.js`、
+`search.js`、`pages.js`、`site-title.js`、`image-index.js`、`avatar.js` 及 `avatar-image.js` 逐字节同步至扩展的 `src/vendor/site-generator/` 目录，
 由双向 CI 脚本 `tools/sync-vendor.mjs --check` 保证代码同步状态。
 
 为此，系统将**纯计算逻辑**与 I/O 操作进行了解耦分离，明确「输入输出差异由各宿主独立处理，数据解析与页面生成逻辑保持单一实现」：
 
 | 拆分模块 | 原始位置 | 职责说明 |
 |---|---|---|
+| `yaml.js` | `markdown.js` | 确定性 YAML front matter 序列化与字符串转义 |
+| `private.js` | `pages.js` | 不公开日记、豆列与广播的可见性判断与过滤边界 |
+| `projection.js` | `projection.js` | 将 canonical 修订记录投影为可读的作品、短评时间线、广播、长文与豆列视图 |
+| `series.js` | 新增 | 提取作品同系列快照证据、账号隔离导航索引与观测变化摘要 |
+| `markdown.js` | `pages.js` | 将单条记录与同系列导航渲染为通用 Markdown 正文与 YAML 元数据 |
+| `search.js` | 新增 | 构建离线站内搜索索引的数据表 `search-index.js`（纯数据结构，不绑定 Hugo） |
 | `pages.js` | `generate.js` | 将数据投影组织为页面层级树（首页、按月归档、状态筛选、小节、豆列及搜索索引），并维护 `MEDIUM_NAMES` / `SECTION_ORDER` / `STATUS_ORDER` |
+| `site-title.js` | `pages.js` | 基于账号资料或覆盖参数解析稳定的站点标题 |
 | `image-index.js` | `images.js` | 负责图片索引映射、命名规则与完整性状态判定 |
+| `avatar.js` / `avatar-image.js` | 新增 | 解析账号头像证据边界、PNG 栅格化与无外链站点图标生成 |
 
 `generate.js` 仅专注于特定运行环境下的 I/O 操作：从 WARC 中提取图片二进制流并将文本写入磁盘。
 图片存储路径由调用方注入（通过 `images` 与 `coverBySubject` 映射表），因此 `pages.js` 完全解耦了底层存储是本地文件系统还是浏览器的 OPFS。

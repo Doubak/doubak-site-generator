@@ -85,13 +85,17 @@ test('real Hugo: both permalink layouts, no dead links, 86 escaped members, no r
   cpSync('theme/hugo',dir,{recursive:true});
   const c=canonical();c.subjects[0].revisions=[revision(1,{title:'A',series:series([item('2'),...Array.from({length:85},(_,i)=>item(String(i+100),'很长的系列名称'.repeat(20)+'[x]_<img src="https://bad.example/x">'))])})];
   for (const [path,text] of buildPages(project(c)).files) {mkdirSync(dirname(join(dir,path)),{recursive:true});writeFileSync(join(dir,path),text);}
+  mkdirSync(join(dir,'content','broadcast'),{recursive:true});
+  writeFileSync(join(dir,'content','broadcast','_index.md'),'---\ntitle: 广播\n---\n');
+  for (let m=1;m<=5;m++) writeFileSync(join(dir,'content','broadcast',`2026-0${m}.md`),`---\ntitle: "2026-0${m}"\ndate: 2026-0${m}-01\ndouban_count: 1\n---\n\n[A](../movie/1.md)\n`);
   const original=readFileSync(join(dir,'hugo.toml'),'utf8');
-  for (const baseURL of ['https://example.test/', 'https://example.test/archive/']) for (const ugly of [true,false]) {
+  for (const baseURL of ['https://example.test/', 'https://example.test', 'https://example.test/archive/', 'https://example.test/archive']) for (const ugly of [true,false]) {
     writeFileSync(join(dir,'hugo.toml'),original.replace('uglyURLs = true',`uglyURLs = ${ugly}`));
     rmSync(join(dir,'public'),{recursive:true,force:true});
     const r=spawnSync(hugo,['--source',dir,'--baseURL',baseURL],{encoding:'utf8'});assert.equal(r.status,0,r.stdout+r.stderr);
     const root=join(dir,'public'), path=join(root,ugly?'movie/1.html':'movie/1/index.html');
     const html=readFileSync(path,'utf8');assert.match(html,ugly?/href="\.\.\/movie\/2.html"/:/href="\.\.\/\.\.\/movie\/2\/"/);
+    assert.match(readFileSync(join(root,'broadcast/page/2/index.html'),'utf8'),ugly?/href="\.\.\/\.\.\/\.\.\/movie\/1.html"/:/href="\.\.\/\.\.\/\.\.\/movie\/1\/"/);
     assert.match(html,/本次记录含 86 个条目/);assert.doesNotMatch(html,/<img[^>]+bad\.example/);
     const section=html.split('id="同系列作品"')[1].split('</ul>')[0];
     assert.equal((section.match(/<li>/g)??[]).length,86);assert.doesNotMatch(section,/<table/);
@@ -111,4 +115,34 @@ test('partially parsed snapshot does not claim unreadable members disappeared fr
     revision(2,{series:{...series([item('3')]),scope:'partial'}})];
   const md=page(c,'1');assert.match(md,/本次可读取部分未列出：Name 2/);
   assert.doesNotMatch(md,/该来源本次未列出：Name 2|退出系列/);
+});
+
+test('partial mark coverage of {A, B, C}: A and B marked, C unmarked stays inline-only without orphan page or search row',()=>{
+  const base=canonical();
+  const c={marks:base.marks.slice(0,2), subjects:base.subjects.slice(0,2)};
+  c.subjects[0].revisions=[revision(1,{title:'Film A',series:series([item('2','Film B'),item('9','Film C')])})];
+  c.subjects[1].revisions=[revision(1,{title:'Film B',series:series([item('1','Film A'),item('9','Film C')])})];
+  const out=buildPages(project(c));
+  const files=new Map(out.files);
+  assert.equal(out.stats.marks,2);
+  assert.equal(files.has('content/movie/9.md'),false);
+  assert.match(files.get('content/movie/1.md'),/\[Film B\]\(\.\.\/movie\/2\.md\)[\s\S]*Film C · 本档案未收录/);
+  assert.match(files.get('content/movie/2.md'),/\[Film A\]\(\.\.\/movie\/1\.md\)[\s\S]*Film C · 本档案未收录/);
+  assert.doesNotMatch(files.get('static/search-index.js'),/Film C|"9"/);
+
+  // Asymmetric case: only A captured series, B omitted it -> B sees reverse link from A only, never C.
+  c.subjects[1].revisions=[revision(1,{title:'Local 2'},['series'])];
+  const asym=new Map(buildPages(project(c)).files);
+  assert.match(asym.get('content/movie/1.md'),/\[Local 2\]\(\.\.\/movie\/2\.md\)[\s\S]*Film C · 本档案未收录/);
+  assert.match(asym.get('content/movie/2.md'),/其他作品页中的关联[\s\S]*\.\.\/movie\/1\.md/);
+  assert.doesNotMatch(asym.get('content/movie/2.md'),/Film C/);
+
+  // Multi-account isolation: C marked only by another account stays unmarked under target account filter.
+  const other=structuredClone(c);
+  other.marks.push({canonical_version:'canonical/1.4',account:{user_id:'999'},upstream_id:'9',identity_layer:'upstream_id',medium:'movie',subject:{id:'9',url:'https://movie.douban.com/subject/9/'},revisions:[revision(1,{status:'done',rating:5,comment:'Other secret',tags:[],marked_at:{iso:'2026-01-01',raw:'2026-01-01',precision:'day'}})]});
+  other.subjects.push({medium:'movie',id:'9',revisions:[revision(1,{title:'Local C'},['series'])]});
+  const own=new Map(buildPages(project(filterCanonicalByAccount(other,'111'))).files);
+  assert.equal(own.has('content/movie/9.md'),false);
+  assert.match(own.get('content/movie/1.md'),/Film C · 本档案未收录/);
+  assert.doesNotMatch(own.get('content/movie/1.md'),/Local C|★★★★★|Other secret/);
 });
